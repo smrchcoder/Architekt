@@ -11,4 +11,3 @@ router = APIRouter(prefix="/validator", tags=["validator"])
 @router.get("/health", response_model=ValidationResultRead)
 def health():
     return ValidationResultRead(valid=True)
-

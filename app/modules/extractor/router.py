@@ -11,4 +11,3 @@ router = APIRouter(prefix="/extractor", tags=["extractor"])
 @router.get("/health", response_model=KnowledgeModelRead)
 def health():
     return KnowledgeModelRead(id="noop", status="ok")
-

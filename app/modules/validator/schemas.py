@@ -5,4 +5,3 @@ from pydantic import BaseModel
 
 class ValidationResultRead(BaseModel):
     valid: bool
-

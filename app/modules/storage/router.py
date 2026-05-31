@@ -9,4 +9,3 @@ router = APIRouter(prefix="/storage", tags=["storage"])
 @router.get("/health")
 def health():
     return {"status": "ok"}
-

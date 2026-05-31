@@ -19,7 +19,7 @@ Run locally (from project root):
 3. Run with Uvicorn:
 
    ```powershell
-   uvicorn main:app --reload
+   uvicorn main:app --reload --host 127.0.0.1 --port 8000
    ```
 
 Or run directly:
@@ -29,3 +29,9 @@ python main.py
 ```
 
 Open http://127.0.0.1:8000 for the API root or http://127.0.0.1:8000/docs for Swagger UI.
+
+If you get `WinError 10013`, try a different port (e.g. 8001):
+
+```powershell
+uvicorn main:app --reload --host 127.0.0.1 --port 8001
+```
