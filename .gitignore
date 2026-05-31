@@ -1,0 +1,39 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Local environment
+.env
+
+# Local database / data
+data/
+.egg-info/
+
+# Editor and environment files
+.vscode/
+venv/
+env/
+
+# Database files
+*.sqlite3
+*.sqlite
+*.db
+
+# Test and coverage
+.pytest_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Logs and notebooks
+*.log
+.ipynb_checkpoints/
+data/

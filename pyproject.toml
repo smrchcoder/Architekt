@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mental-model-generator"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.136.3",
+    "pydantic>=2.13.4",
+    "pydantic-settings>=2.6.1",
+    "python-dotenv>=1.0.1",
+    "sqlalchemy>=2.0.36",
+    "alembic>=1.14.0",
+    "uvicorn>=0.48.0",
+    "ruff>=0.15.15",
+]
+
+[tool.setuptools]
+packages = ["app"]
