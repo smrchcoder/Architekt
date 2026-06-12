@@ -9,6 +9,9 @@ from app.modules.extractor.prompts.knowledge_extraction import (
     KNOWLEDGE_EXTRACTION_SYSTEM_PROMPT,
     build_user_prompt,
 )
+from app.modules.extractor.services.knowledge_model_validator import (
+    KnowledgeModelValidator,
+)
 from app.storage.repository import ArticleRepository
 from app.storage.models import KnowledgeModelRecord
 
@@ -19,10 +22,12 @@ class KnowledgeExtractor:
         repo: KnowledgeModelRepository | None = None,
         article_repo: ArticleRepository | None = None,
         llm_client: LLMClient | None = None,
+        validator: KnowledgeModelValidator | None = None,
     ) -> None:
         self.repo = repo or KnowledgeModelRepository()
         self.article_repo = article_repo or ArticleRepository()
         self.llm_client = llm_client or LLMClient()
+        self.validator = validator or KnowledgeModelValidator()
 
     def extract_knowledge_model(
         self, db: Session, article_id: str
@@ -50,6 +55,7 @@ class KnowledgeExtractor:
             ),
             response_model=KnowledgeModel,
         )
+        self.validator.validate(result)
         record = KnowledgeModelRecord(
             article_id=article.article_id,
             source_url=article.source_url,
