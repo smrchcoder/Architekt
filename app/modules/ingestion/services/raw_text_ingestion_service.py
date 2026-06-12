@@ -3,7 +3,9 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 from app.modules.ingestion.schema.article_schema import ArticleCreate
-from app.modules.ingestion.services.document_cleaning_service import DocumentCleaningService
+from app.modules.ingestion.services.document_cleaning_service import (
+    DocumentCleaningService,
+)
 from app.storage.models import Article
 from app.storage.repository import ArticleRepository
 

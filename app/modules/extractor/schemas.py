@@ -1,8 +1,19 @@
 from __future__ import annotations
 
-from pydantic import BaseModel
+from datetime import datetime
+
+from pydantic import BaseModel, Field
+
+from app.modules.extractor.models.knowledge_model import KnowledgeModel
 
 
 class KnowledgeModelRead(BaseModel):
-    id: str
-    status: str
+    article_id: str
+    source_url: str | None
+    knowledge_model: KnowledgeModel
+    created_at: datetime
+
+
+class KnowledgeExtractionResponse(BaseModel):
+    extraction: KnowledgeModelRead
+    message: str = Field(default="extracted")

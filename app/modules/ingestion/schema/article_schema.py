@@ -17,7 +17,7 @@ class ArticleCreate(BaseModel):
 
 
 class ArticleRead(BaseModel):
-    unique_id: str
+    article_id: str
     source_url: str | None
     raw_text: str | None
     cleaned_text: str | None

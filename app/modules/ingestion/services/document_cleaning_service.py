@@ -35,5 +35,7 @@ class DocumentCleaningService:
         return normalized
 
     def _is_boilerplate(self, line: str) -> bool:
-        return any(re.match(pattern, line, re.IGNORECASE) for pattern in self._boilerplate_patterns)
-
+        return any(
+            re.match(pattern, line, re.IGNORECASE)
+            for pattern in self._boilerplate_patterns
+        )

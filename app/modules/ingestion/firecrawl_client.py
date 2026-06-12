@@ -35,4 +35,6 @@ class FirecrawlClient:
             markdown = doc.get("markdown") if isinstance(doc, dict) else None
         if not markdown:
             raise ValueError("Firecrawl scrape succeeded but markdown was empty")
-        return FirecrawlScrapeResult(url=request.url, markdown=markdown, elapsed_ms=elapsed_ms)
+        return FirecrawlScrapeResult(
+            url=request.url, markdown=markdown, elapsed_ms=elapsed_ms
+        )

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -25,7 +23,7 @@ def ingest_article(payload: ArticleCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return ArticleIngestResponse(
         article=ArticleRead(
-            unique_id=article.unique_id,
+            article_id=article.article_id,
             source_url=article.source_url,
             raw_text=article.raw_text,
             cleaned_text=article.cleaned_text,
@@ -37,14 +35,14 @@ def ingest_article(payload: ArticleCreate, db: Session = Depends(get_db)):
     )
 
 
-@router.get("/articles/{unique_id}", response_model=ArticleRead)
-def get_article(unique_id: str, db: Session = Depends(get_db)):
+@router.get("/articles/{article_id}", response_model=ArticleRead)
+def get_article(article_id: str, db: Session = Depends(get_db)):
     repo = ArticleRepository()
-    article = repo.get(db, unique_id)
+    article = repo.get(db, article_id)
     if not article:
         raise HTTPException(status_code=404, detail="article not found")
     return ArticleRead(
-        unique_id=article.unique_id,
+        article_id=article.article_id,
         source_url=article.source_url,
         raw_text=article.raw_text,
         cleaned_text=article.cleaned_text,

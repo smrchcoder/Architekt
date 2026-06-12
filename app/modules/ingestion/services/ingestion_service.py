@@ -3,7 +3,9 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 from app.modules.ingestion.schema.article_schema import ArticleCreate
-from app.modules.ingestion.services.raw_text_ingestion_service import RawTextIngestionService
+from app.modules.ingestion.services.raw_text_ingestion_service import (
+    RawTextIngestionService,
+)
 from app.modules.ingestion.services.url_ingestion_service import UrlIngestionService
 from app.storage.models import Article
 
