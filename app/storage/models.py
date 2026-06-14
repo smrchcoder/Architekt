@@ -45,3 +45,40 @@ class KnowledgeModelRecord(Base):
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
     )
+
+
+class ProcessingRun(Base):
+    __tablename__ = "processing_runs"
+
+    run_id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="queued")
+    current_step: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="queued"
+    )
+    progress_percent: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    article_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("articles.article_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    section_1_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    section_2_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    section_3_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    section_4_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    section_5_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    section_6_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    request_payload: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
