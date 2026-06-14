@@ -20,6 +20,23 @@ class ConceptEntry(BaseModel):
     )
 
 
+class ConceptEnrichment(BaseModel):
+    id: str = Field(..., description="Matching slug from the input concept")
+    short_def: str = Field(
+        ..., description="LLM-enriched definition, 1-2 sentences, grounded in article context"
+    )
+    why_it_matters: str = Field(
+        ...,
+        description="LLM-enriched explanation of why this concept matters for this specific system",
+    )
+
+
+class KeyConceptsEnrichment(BaseModel):
+    concepts: list[ConceptEnrichment] = Field(
+        ..., min_length=2, max_length=8, description="Enriched concepts in the same order as input"
+    )
+
+
 class KeyConceptsSection(BaseModel):
     concepts: list[ConceptEntry] = Field(
         ...,

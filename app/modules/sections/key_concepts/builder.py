@@ -1,15 +1,27 @@
 from __future__ import annotations
 
+import json
 import re
 from collections import Counter
+from typing import Any
 
+from app.llm import LLMClient
 from app.modules.extractor.models.knowledge_model import (
     ConceptDef,
     EntityType,
     KnowledgeModel,
     NamedEntity,
 )
-from app.modules.sections.key_concepts.schemas import ConceptEntry, KeyConceptsSection
+from app.modules.sections.key_concepts.prompts import (
+    KEY_CONCEPTS_SYSTEM_PROMPT,
+    build_key_concepts_user_prompt,
+)
+from app.modules.sections.key_concepts.schemas import (
+    ConceptEnrichment,
+    ConceptEntry,
+    KeyConceptsEnrichment,
+    KeyConceptsSection,
+)
 from app.storage.models import Article
 
 GENERIC_TERMS: set[str] = {
@@ -20,9 +32,13 @@ GENERIC_TERMS: set[str] = {
 
 
 class KeyConceptsBuilder:
+    def __init__(self, llm_client: LLMClient | None = None) -> None:
+        self._llm = llm_client or LLMClient()
+
     def build(
         self, knowledge_model: KnowledgeModel, article: Article
     ) -> KeyConceptsSection:
+        # ── Phase 1: deterministic filtering & ranking ──────────────────
         if len(knowledge_model.concept_definitions) < 2:
             raise ValueError(
                 "key concepts requires at least 2 concept_definitions in the KnowledgeModel"
@@ -50,6 +66,30 @@ class KeyConceptsBuilder:
                 "key concepts requires at least 2 load-bearing concepts after filtering"
             )
 
+        # ── Phase 2: LLM enrichment of narrative fields ─────────────────
+        concepts_json = self._build_enrichment_input(selected, knowledge_model, entity_map)
+        context_snippets = self._gather_context_snippets(selected, knowledge_model, entity_map)
+
+        try:
+            enrichment = self._llm.extract_structured(
+                system_prompt=KEY_CONCEPTS_SYSTEM_PROMPT,
+                user_prompt=build_key_concepts_user_prompt(
+                    concepts_json=concepts_json,
+                    article_title=article.source_title or "Untitled",
+                    article_domain=article.source_domain or "Unknown",
+                    article_context_snippets=context_snippets,
+                ),
+                response_model=KeyConceptsEnrichment,
+                temperature=0.4,
+                validation_retries=2,
+            )
+            enriched_map: dict[str, ConceptEnrichment] = {
+                e.id: e for e in enrichment.concepts
+            }
+        except Exception:
+            enriched_map = {}
+
+        # ── Phase 3: assemble final entries ─────────────────────────────
         entries: list[ConceptEntry] = []
         slug_counts: dict[str, int] = {}
         for _, concept in selected:
@@ -58,10 +98,16 @@ class KeyConceptsBuilder:
             if slug_counts[slug] > 1:
                 slug = f"{slug}-{slug_counts[slug]}"
 
-            short_def = self._resolve_definition(concept, knowledge_model, entity_map)
-            why_it_matters = self._build_why_it_matters(
-                concept, knowledge_model, relationship_refs, flow_refs
-            )
+            enriched = enriched_map.get(slug)
+            if enriched:
+                short_def = enriched.short_def
+                why_it_matters = enriched.why_it_matters
+            else:
+                short_def = self._resolve_definition(concept, knowledge_model, entity_map)
+                why_it_matters = self._build_why_it_matters(
+                    concept, knowledge_model, relationship_refs, flow_refs
+                )
+
             arch_refs = self._resolve_architecture_refs(concept, knowledge_model)
 
             entries.append(
@@ -77,6 +123,8 @@ class KeyConceptsBuilder:
             )
 
         return KeyConceptsSection(concepts=entries)
+
+    # ── Phase 1 helpers ─────────────────────────────────────────────────
 
     @staticmethod
     def _build_entity_map(entities: list[NamedEntity]) -> dict[str, NamedEntity]:
@@ -103,6 +151,77 @@ class KeyConceptsBuilder:
             if step.target:
                 counts[step.target] += 1
         return dict(counts)
+
+    # ── Phase 2 helpers ─────────────────────────────────────────────────
+
+    def _build_enrichment_input(
+        self,
+        scored: list[tuple[int, ConceptDef]],
+        knowledge_model: KnowledgeModel,
+        entity_map: dict[str, NamedEntity],
+    ) -> str:
+        payload: list[dict[str, Any]] = []
+        for _, concept in scored:
+            slug = self._slugify(concept.term)
+            entity = entity_map.get(concept.term.lower())
+            relevant_rels = [
+                f"{rel.source} → {rel.target}: {rel.label}"
+                for rel in knowledge_model.relationships
+                if rel.source.lower() == concept.term.lower()
+                or rel.target.lower() == concept.term.lower()
+            ]
+            relevant_flows = [
+                f"Step {step.step_order}: {step.actor} → {step.target or '—'}: {step.action}"
+                for step in knowledge_model.flow_sequences
+                if step.actor.lower() == concept.term.lower()
+                or (step.target and step.target.lower() == concept.term.lower())
+            ]
+            payload.append({
+                "id": slug,
+                "term": concept.term,
+                "category": concept.category_hint.value,
+                "difficulty": concept.difficulty_hint.value,
+                "usage_count": concept.usage_count,
+                "inline_definition": concept.inline_definition,
+                "first_mention_context": entity.first_mention_context if entity else None,
+                "relationships": relevant_rels[:3],
+                "flow_steps": relevant_flows[:3],
+            })
+        return json.dumps(payload, indent=2, ensure_ascii=False)
+
+    def _gather_context_snippets(
+        self,
+        scored: list[tuple[int, ConceptDef]],
+        knowledge_model: KnowledgeModel,
+        entity_map: dict[str, NamedEntity],
+    ) -> str:
+        seen: set[str] = set()
+        snippets: list[str] = []
+        for _, concept in scored:
+            entity = entity_map.get(concept.term.lower())
+            if entity and entity.first_mention_context not in seen:
+                seen.add(entity.first_mention_context)
+                snippets.append(f"[{entity.name}] {entity.first_mention_context}")
+
+            for rel in knowledge_model.relationships:
+                if (rel.source.lower() == concept.term.lower()
+                        or rel.target.lower() == concept.term.lower()):
+                    text = f"[{rel.source} ↔ {rel.target}] {rel.label}"
+                    if text not in seen:
+                        seen.add(text)
+                        snippets.append(text)
+
+            for step in knowledge_model.flow_sequences:
+                if (step.actor.lower() == concept.term.lower()
+                        or (step.target and step.target.lower() == concept.term.lower())):
+                    text = f"[Flow step {step.step_order}] {step.actor} → {step.target or '—'}: {step.action}"
+                    if text not in seen:
+                        seen.add(text)
+                        snippets.append(text)
+
+        return "\n".join(snippets)
+
+    # ── Phase 3 & fallback helpers ──────────────────────────────────────
 
     def _resolve_definition(
         self,

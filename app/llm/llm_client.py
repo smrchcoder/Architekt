@@ -68,6 +68,8 @@ class LLMClient:
         system_prompt: str,
         user_prompt: str,
         response_model: Type[T],
+        # 0.0 for factual extraction (KnowledgeModel), ~0.4 for Story generation.
+        temperature: float = 0.0,
         # Number of times instructor will retry Pydantic *validation* failures
         # by re-prompting the model with the specific validation error.
         # This is NOT the same as network/API retry — that is handled by the
@@ -94,6 +96,6 @@ class LLMClient:
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            temperature=0.0,  # Always 0 for factual extraction; increases to ~0.4 for Story generation
+            temperature=temperature,
             max_retries=validation_retries,
         )
