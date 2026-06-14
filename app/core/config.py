@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     )
     gemini_api_key: str | None = None
     llm_model: str = "gpt-4o"
+    cors_origins: str | None = None
 
 
 settings = Settings()

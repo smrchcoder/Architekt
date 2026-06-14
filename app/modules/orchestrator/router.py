@@ -16,7 +16,12 @@ router = APIRouter(prefix="/orchestrator", tags=["orchestrator"])
 
 @router.get("/health", response_model=ProcessingRunRead)
 def health():
-    return ProcessingRunRead(run_id="noop", status="ok")
+    return ProcessingRunRead(
+        run_id="noop",
+        status="completed",
+        current_step="health",
+        progress_percent=100,
+    )
 
 
 @router.post("/runs", response_model=ProcessingRunRead, status_code=202)

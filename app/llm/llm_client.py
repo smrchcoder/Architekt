@@ -44,7 +44,7 @@ class LLMClient:
             # Inject the key into the environment so the openai SDK picks it up.
             # from_provider("openai/...") reads OPENAI_API_KEY from env automatically.
             if settings.openai_api_key:
-                os.environ.setdefault("OPENAI_API_KEY", settings.openai_api_key)
+                os.environ["OPENAI_API_KEY"] = settings.openai_api_key
             self._client = instructor.from_provider(f"openai/{self.model}")
 
         elif self.provider == "gemini":
@@ -52,7 +52,7 @@ class LLMClient:
             # This supports complex nested Pydantic schemas correctly — the compat
             # URL workaround does not.
             if settings.gemini_api_key:
-                os.environ.setdefault("GOOGLE_API_KEY", settings.gemini_api_key)
+                os.environ["GOOGLE_API_KEY"] = settings.gemini_api_key
             self._client = instructor.from_provider(f"google/{self.model}")
 
         else:

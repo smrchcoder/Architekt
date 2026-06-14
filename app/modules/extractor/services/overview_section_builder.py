@@ -82,7 +82,7 @@ class OverviewSectionBuilder:
             CategoryHint.ALGORITHM: "Algorithms",
         }
         for concept in knowledge_model.concept_definitions:
-            self._append_unique(tags, category_tags[concept.category_hint])
+            self._append_unique(tags, category_tags.get(concept.category_hint, "Other"))
 
         layer_text = " ".join(layer.layer_name.lower() for layer in knowledge_model.layer_signals)
         layer_tags = [

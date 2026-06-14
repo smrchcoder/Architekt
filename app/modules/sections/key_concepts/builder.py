@@ -6,6 +6,7 @@ from collections import Counter
 from typing import Any
 
 from app.llm import LLMClient
+from app.logging_config import get_logger
 from app.modules.extractor.models.knowledge_model import (
     ConceptDef,
     EntityType,
@@ -30,6 +31,8 @@ GENERIC_TERMS: set[str] = {
     "load balancer", "cache", "docker", "kubernetes", "k8s",
 }
 
+_log = get_logger(__name__)
+
 
 class KeyConceptsBuilder:
     def __init__(self, llm_client: LLMClient | None = None) -> None:
@@ -38,7 +41,15 @@ class KeyConceptsBuilder:
     def build(
         self, knowledge_model: KnowledgeModel, article: Article
     ) -> KeyConceptsSection:
+        log = _log.bind(
+            article_id=article.article_id,
+            title=(article.source_title or "")[:60],
+        )
+        log.info("section_2:build_start | raw_concepts=%d",
+                 len(knowledge_model.concept_definitions))
+
         # ── Phase 1: deterministic filtering & ranking ──────────────────
+        log.info("section_2:phase_1_start | filter_generics | score_concepts")
         if len(knowledge_model.concept_definitions) < 2:
             raise ValueError(
                 "key concepts requires at least 2 concept_definitions in the KnowledgeModel"
@@ -48,7 +59,7 @@ class KeyConceptsBuilder:
         relationship_refs = self._count_relationship_refs(knowledge_model)
         flow_refs = self._count_flow_refs(knowledge_model)
 
-        scored: list[tuple[int, ConceptDef]] = []
+        concept_score_list: list[tuple[int, ConceptDef]] = []
         for concept in knowledge_model.concept_definitions:
             term_lower = concept.term.lower()
             is_generic = term_lower in GENERIC_TERMS
@@ -56,10 +67,17 @@ class KeyConceptsBuilder:
             if is_generic and ref_total == 0 and concept.usage_count <= 2:
                 continue
             score = concept.usage_count + (ref_total * 2)
-            scored.append((score, concept))
+            concept_score_list.append((score, concept))
 
-        scored.sort(key=lambda x: x[0], reverse=True)
-        selected = scored[:8]
+        concept_score_list.sort(key=lambda x: x[0], reverse=True)
+        selected = concept_score_list[:8]
+
+        log.info(
+            "section_2:phase_1_complete | scored=%d | selected=%d | dropped_generic=%d",
+            len(concept_score_list),
+            len(selected),
+            len(knowledge_model.concept_definitions) - len(concept_score_list),
+        )
 
         if len(selected) < 2:
             raise ValueError(
@@ -67,8 +85,15 @@ class KeyConceptsBuilder:
             )
 
         # ── Phase 2: LLM enrichment of narrative fields ─────────────────
+        log.info("section_2:phase_2_start | llm_enrichment | concepts_to_enrich=%d",
+                 len(selected))
         concepts_json = self._build_enrichment_input(selected, knowledge_model, entity_map)
         context_snippets = self._gather_context_snippets(selected, knowledge_model, entity_map)
+
+        log.info(
+            "section_2:phase_2_prompt_built | json_bytes=%d | snippets_chars=%d",
+            len(concepts_json), len(context_snippets),
+        )
 
         try:
             enrichment = self._llm.extract_structured(
@@ -86,12 +111,24 @@ class KeyConceptsBuilder:
             enriched_map: dict[str, ConceptEnrichment] = {
                 e.id: e for e in enrichment.concepts
             }
+            log.info(
+                "section_2:phase_2_complete | enriched_concepts=%d | ids=%s",
+                len(enriched_map),
+                list(enriched_map.keys()),
+            )
         except Exception:
             enriched_map = {}
+            log.opt.warning(
+                "section_2:phase_2_failed | falling_back_to_deterministic | selected=%d",
+                len(selected),
+            )
 
         # ── Phase 3: assemble final entries ─────────────────────────────
+        log.info("section_2:phase_3_start | assembling_final_entries")
         entries: list[ConceptEntry] = []
         slug_counts: dict[str, int] = {}
+        llm_enriched_count = 0
+        fallback_count = 0
         for _, concept in selected:
             slug = self._slugify(concept.term)
             slug_counts[slug] = slug_counts.get(slug, 0) + 1
@@ -102,11 +139,13 @@ class KeyConceptsBuilder:
             if enriched:
                 short_def = enriched.short_def
                 why_it_matters = enriched.why_it_matters
+                llm_enriched_count += 1
             else:
                 short_def = self._resolve_definition(concept, knowledge_model, entity_map)
                 why_it_matters = self._build_why_it_matters(
                     concept, knowledge_model, relationship_refs, flow_refs
                 )
+                fallback_count += 1
 
             arch_refs = self._resolve_architecture_refs(concept, knowledge_model)
 
@@ -122,18 +161,21 @@ class KeyConceptsBuilder:
                 )
             )
 
-        return KeyConceptsSection(concepts=entries)
-
-    # ── Phase 1 helpers ─────────────────────────────────────────────────
-
-    @staticmethod
-    def _build_entity_map(entities: list[NamedEntity]) -> dict[str, NamedEntity]:
-        out: dict[str, NamedEntity] = {}
+        result = KeyConceptsSection(concepts=entries)
+        log.info(
+            "section_2:build_complete | total_concepts=%d | llm_enriched=%d | fallback=%d",
+            len(entries),
+            llm_enriched_count,
+            fallback_count,
+        )
+        return result
+    def _build_entity_map(self, entities: list[NamedEntity]) -> dict[str, NamedEntity]:
+        entity_map: dict[str, NamedEntity] = {}
         for e in entities:
-            out[e.name.lower()] = e
+            entity_map[e.name.lower()] = e
             for alias in e.aliases:
-                out[alias.lower()] = e
-        return out
+                entity_map[alias.lower()] = e
+        return entity_map
 
     @staticmethod
     def _count_relationship_refs(knowledge_model: KnowledgeModel) -> dict[str, int]:

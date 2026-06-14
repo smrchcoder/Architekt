@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 from pydantic import ValidationError
@@ -103,16 +104,22 @@ class KnowledgeModelValidator:
 
         for index, signal in enumerate(knowledge_model.temporal_signals):
             if signal.before_entity:
+                before = self._normalize_temporal_entity(
+                    signal.before_entity, entity_name_set
+                )
                 self._validate_reference(
                     f"temporal_signals[{index}].before_entity",
-                    signal.before_entity,
+                    before,
                     entity_name_set,
                     errors,
                 )
             if signal.after_entity:
+                after = self._normalize_temporal_entity(
+                    signal.after_entity, entity_name_set
+                )
                 self._validate_reference(
                     f"temporal_signals[{index}].after_entity",
-                    signal.after_entity,
+                    after,
                     entity_name_set,
                     errors,
                 )
@@ -128,8 +135,16 @@ class KnowledgeModelValidator:
         value: str,
         valid_values: set[str],
         errors: list[str],
+        fuzzy: bool = False,
     ) -> None:
-        if value not in valid_values:
+        if fuzzy:
+            matched = any(
+                valid in value or value in valid
+                for valid in valid_values
+            )
+            if not matched:
+                errors.append(f"{field_name} references unknown or unmatched entity '{value}'")
+        elif value not in valid_values:
             errors.append(f"{field_name} references unknown entity '{value}'")
 
     @staticmethod
@@ -146,3 +161,19 @@ class KnowledgeModelValidator:
             seen.add(value)
         for duplicate in sorted(duplicates, key=str):
             errors.append(f"{field_name} contains duplicate value '{duplicate}'")
+
+    @staticmethod
+    def _normalize_temporal_entity(
+        value: str,
+        entity_name_set: set[str],
+    ) -> str:
+        """Strip parenthetical qualifiers from temporal signal entity refs.
+
+        The LLM often writes '"Durable Objects (previous runtime)"' where the
+        actual entity name is 'Durable Objects'. Normalize to the matching
+        entity name. If no match found, return the original.
+        """
+        for name in entity_name_set:
+            if name in value:
+                return name
+        return value
