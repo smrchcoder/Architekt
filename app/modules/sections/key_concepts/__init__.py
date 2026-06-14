@@ -1,0 +1,1 @@
+"""Key Concepts section builder."""
