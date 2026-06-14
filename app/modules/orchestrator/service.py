@@ -13,6 +13,7 @@ from app.modules.extractor.services.knowledge_model_validator import (
 from app.modules.extractor.services.overview_section_builder import (
     OverviewSectionBuilder,
 )
+from app.modules.sections.key_concepts.builder import KeyConceptsBuilder
 from app.modules.ingestion.schema.article_schema import ArticleCreate
 from app.modules.ingestion.services.ingestion_service import IngestionService
 from app.modules.orchestrator.schemas import (
@@ -54,7 +55,7 @@ class OrchestratorService:
         knowledge_extractor: KnowledgeExtractor | None = None,
         knowledge_validator: KnowledgeModelValidator | None = None,
         section_1_builder: OverviewSectionBuilder | None = None,
-        section_2_builder: Any | None = None,
+        section_2_builder: KeyConceptsBuilder | None = None,
         section_3_builder: Any | None = None,
         section_4_builder: Any | None = None,
         section_5_builder: Any | None = None,
@@ -65,7 +66,7 @@ class OrchestratorService:
         self.knowledge_validator = knowledge_validator or KnowledgeModelValidator()
         self.section_builders = {
             "section_1": section_1_builder or OverviewSectionBuilder(),
-            "section_2": section_2_builder,
+            "section_2": section_2_builder or KeyConceptsBuilder(),
             "section_3": section_3_builder,
             "section_4": section_4_builder,
             "section_5": section_5_builder,
