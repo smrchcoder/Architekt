@@ -25,6 +25,8 @@ class ArticleRead(BaseModel):
     processing_time: int | None
     source_title: str | None
     source_domain: str | None
+    media_items: list[dict] | None = None
+    extraction_warnings: list[str] | None = None
 
 
 class ArticleIngestResponse(BaseModel):

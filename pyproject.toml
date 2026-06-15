@@ -23,5 +23,5 @@ dependencies = [
     "openai>=2.41.1",
 ]
 
-[tool.setuptools]
-packages = ["app"]
+[tool.setuptools.packages]
+find = {}

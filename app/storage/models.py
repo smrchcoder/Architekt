@@ -23,6 +23,8 @@ class Article(Base):
     processing_time: Mapped[int | None] = mapped_column(Integer, nullable=True)
     source_title: Mapped[str | None] = mapped_column(String(512), nullable=True)
     source_domain: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    media_items: Mapped[Any | None] = mapped_column(JSON, nullable=True)
+    extraction_warnings: Mapped[Any | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

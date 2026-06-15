@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.llm import LLMClient
 from app.modules.extractor.models.knowledge_model import KnowledgeModel
 from app.modules.extractor.repository import KnowledgeModelRepository
@@ -54,6 +55,7 @@ class KnowledgeExtractor:
                 word_count=article.word_count,
             ),
             response_model=KnowledgeModel,
+            model=settings.extraction_model,
         )
         self.validator.validate(result)
         record = KnowledgeModelRecord(

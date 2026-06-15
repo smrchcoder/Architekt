@@ -37,6 +37,13 @@ class DifficultyHint(str, Enum):
     ADVANCED = "advanced"
 
 
+class ConceptKind(str, Enum):
+    DOMAIN_ABSTRACTION = "domain_abstraction"
+    ARCHITECTURAL_CONCERN = "architectural_concern"
+    DESIGN_PATTERN = "design_pattern"
+    IMPLEMENTATION_DETAIL = "implementation_detail"
+
+
 class TemporalSignalType(str, Enum):
     PREVIOUS_SYSTEM = "previous_system"
     MIGRATION = "migration"
@@ -84,6 +91,12 @@ class FlowStep(BaseModel):
     )
 
 
+class TradeoffItem(BaseModel):
+    description: str = Field(..., description="The tradeoff as described in the article")
+    benefit: str | None = Field(default=None, description="What was gained by accepting this tradeoff")
+    cost: str | None = Field(default=None, description="What was given up or made more complex")
+
+
 class ConceptDef(BaseModel):
     term: str = Field(..., description="The technical term")
     inline_definition: str | None = Field(
@@ -94,6 +107,10 @@ class ConceptDef(BaseModel):
     )
     difficulty_hint: DifficultyHint = Field(
         ..., description="Difficulty rating for readers"
+    )
+    concept_kind: ConceptKind = Field(
+        default=ConceptKind.DOMAIN_ABSTRACTION,
+        description="Domain abstraction, architectural concern, design pattern, or implementation detail",
     )
     usage_count: int = Field(
         default=1, ge=1, description="Approximate count of mentions"
@@ -147,10 +164,10 @@ class KnowledgeModel(BaseModel):
         max_length=5,
         description="Non-negotiable requirements the solution had to satisfy",
     )
-    tradeoff_signals: list[str] = Field(
+    tradeoff_signals: list[str | TradeoffItem] = Field(
         default_factory=list,
         max_length=8,
-        description="Phrases indicating cost/benefit trade-offs or design choices",
+        description="Phrases indicating cost/benefit trade-offs or design choices. May be strings or structured TradeoffItem objects.",
     )
     flow_sequences: list[FlowStep] = Field(
         default_factory=list,
@@ -165,7 +182,7 @@ class KnowledgeModel(BaseModel):
     concept_definitions: list[ConceptDef] = Field(
         default_factory=list,
         min_length=2,
-        max_length=8,
+        max_length=12,
         description="Glossary of load-bearing technical concepts needing definitions",
     )
     layer_signals: list[LayerSignal] = Field(
