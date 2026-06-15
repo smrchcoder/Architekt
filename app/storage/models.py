@@ -42,6 +42,9 @@ class KnowledgeModelRecord(Base):
     )
     source_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     raw_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    pass_1_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    pass_2_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    pass_3_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

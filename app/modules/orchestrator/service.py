@@ -28,8 +28,8 @@ from app.storage.models import ProcessingRun
 _log = get_logger(__name__)
 
 STEP_INGESTION = "ingestion"
-STEP_EXTRACTION = "knowledge_extraction"
-STEP_VALIDATION = "knowledge_validation"
+STEP_MULTI_PASS_EXTRACTION = "multi_pass_extraction"
+STEP_MERGE_VALIDATION = "merge_validation"
 
 STEP_SECTION_1_OVERVIEW = "section_1_overview"
 STEP_SECTION_2_KEY_CONCEPTS = "section_2_key_concepts"
@@ -40,8 +40,8 @@ STEP_SECTION_6_TRADEOFFS = "section_6_tradeoffs_key_learnings"
 
 PIPELINE_STEPS = [
     STEP_INGESTION,
-    STEP_EXTRACTION,
-    STEP_VALIDATION,
+    STEP_MULTI_PASS_EXTRACTION,
+    STEP_MERGE_VALIDATION,
     STEP_SECTION_1_OVERVIEW,
     STEP_SECTION_2_KEY_CONCEPTS,
     STEP_SECTION_3_PROBLEM,
@@ -130,20 +130,20 @@ class OrchestratorService:
                 (article.source_title or "")[:80],
             )
 
-            # ── Step 2: Knowledge Extraction ────────────────────────────
+            # ── Step 2: Multi-Pass Knowledge Extraction ──────────────────
             log.info(
                 "step_start | step=%s | progress=%d%% | article_id=%s",
-                STEP_EXTRACTION, 20, article.article_id,
+                STEP_MULTI_PASS_EXTRACTION, 15, article.article_id,
             )
             self._update_run(
                 db, run_id,
-                current_step=STEP_EXTRACTION, progress_percent=20,
+                current_step=STEP_MULTI_PASS_EXTRACTION, progress_percent=15,
                 article_id=article.article_id,
             )
 
             knowledge_record = self._with_retry(
                 func=self.knowledge_extractor.extract_knowledge_model,
-                step_name=STEP_EXTRACTION,
+                step_name=STEP_MULTI_PASS_EXTRACTION,
                 db=db,
                 article_id=article.article_id,
                 max_attempts=2,
@@ -151,16 +151,16 @@ class OrchestratorService:
             )
             log.info(
                 "step_complete | step=%s | record_id=%s | raw_json_bytes=%d",
-                STEP_EXTRACTION,
+                STEP_MULTI_PASS_EXTRACTION,
                 knowledge_record.article_id,
                 len(str(knowledge_record.raw_json)),
             )
 
-            # ── Step 3: Validation ──────────────────────────────────────
-            log.info("step_start | step=%s | progress=%d%%", STEP_VALIDATION, 35)
+            # ── Step 3: Merge & Cross-Pass Validation ───────────────────
+            log.info("step_start | step=%s | progress=%d%%", STEP_MERGE_VALIDATION, 25)
             self._update_run(
                 db, run_id,
-                current_step=STEP_VALIDATION, progress_percent=35,
+                current_step=STEP_MERGE_VALIDATION, progress_percent=25,
             )
 
             knowledge_model = self.knowledge_validator.validate_raw(
@@ -168,26 +168,26 @@ class OrchestratorService:
             )
             log.info(
                 "step_complete | step=%s | confidence=%.2f | entities=%d | "
-                "concepts=%d | relationships=%d | flow_steps=%d | "
-                "problem_signals=%d | warnings=%d",
-                STEP_VALIDATION,
+                "concepts=%d | relationships=%d | flows=%d | "
+                "tradeoffs=%d | warnings=%d",
+                STEP_MERGE_VALIDATION,
                 knowledge_model.confidence_score,
                 len(knowledge_model.named_entities),
                 len(knowledge_model.concept_definitions),
                 len(knowledge_model.relationships),
                 len(knowledge_model.flow_sequences),
-                len(knowledge_model.problem_signals),
+                len(knowledge_model.tradeoff_signals),
                 len(knowledge_model.extraction_warnings),
             )
 
             # ── Steps 4-9: Section Builders ─────────────────────────────
             section_pipeline = [
-                (STEP_SECTION_1_OVERVIEW, "section_1", 45, 2),
-                (STEP_SECTION_2_KEY_CONCEPTS, "section_2", 55, 2),
-                (STEP_SECTION_3_PROBLEM, "section_3", 63, 2),
-                (STEP_SECTION_4_ARCHITECTURE, "section_4", 71, 2),
-                (STEP_SECTION_5_FLOW, "section_5", 79, 2),
-                (STEP_SECTION_6_TRADEOFFS, "section_6", 87, 2),
+                (STEP_SECTION_1_OVERVIEW, "section_1", 35, 2),
+                (STEP_SECTION_2_KEY_CONCEPTS, "section_2", 45, 2),
+                (STEP_SECTION_3_PROBLEM, "section_3", 53, 2),
+                (STEP_SECTION_4_ARCHITECTURE, "section_4", 61, 2),
+                (STEP_SECTION_5_FLOW, "section_5", 69, 2),
+                (STEP_SECTION_6_TRADEOFFS, "section_6", 77, 2),
             ]
 
             for step_name, slot, progress, max_attempts in section_pipeline:
@@ -336,14 +336,14 @@ class OrchestratorService:
     def _progress_for(step_name: str, attempt: int, _max_attempts: int) -> int:
         base = {
             STEP_INGESTION: 5,
-            STEP_EXTRACTION: 20,
-            STEP_VALIDATION: 35,
-            STEP_SECTION_1_OVERVIEW: 45,
-            STEP_SECTION_2_KEY_CONCEPTS: 55,
-            STEP_SECTION_3_PROBLEM: 63,
-            STEP_SECTION_4_ARCHITECTURE: 71,
-            STEP_SECTION_5_FLOW: 79,
-            STEP_SECTION_6_TRADEOFFS: 87,
+            STEP_MULTI_PASS_EXTRACTION: 15,
+            STEP_MERGE_VALIDATION: 25,
+            STEP_SECTION_1_OVERVIEW: 35,
+            STEP_SECTION_2_KEY_CONCEPTS: 45,
+            STEP_SECTION_3_PROBLEM: 53,
+            STEP_SECTION_4_ARCHITECTURE: 61,
+            STEP_SECTION_5_FLOW: 69,
+            STEP_SECTION_6_TRADEOFFS: 77,
         }
         return base.get(step_name, 50) + (attempt * 2)
 

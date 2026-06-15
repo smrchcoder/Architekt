@@ -25,8 +25,15 @@ class Settings(BaseSettings):
     gemini_api_key: str | None = None
     llm_model: str = "gpt-4o"
     extraction_model: str = "gpt-4o"
+    extraction_model_pass_1: str | None = None
+    extraction_model_pass_2: str | None = None
+    extraction_model_pass_3: str | None = None
     section_model: str = "gpt-4o-mini"
     cors_origins: str | None = None
+
+    # Confidence Gating
+    extraction_confidence_threshold: float = 0.75
+    extraction_max_retries_per_pass: int = 3
 
 
 settings = Settings()

@@ -199,10 +199,11 @@ class KeyConceptsBuilder:
     @staticmethod
     def _count_flow_refs(knowledge_model: KnowledgeModel) -> dict[str, int]:
         counts: Counter[str] = Counter()
-        for step in knowledge_model.flow_sequences:
-            counts[step.actor] += 1
-            if step.target:
-                counts[step.target] += 1
+        for sequence in knowledge_model.flow_sequences:
+            for step in sequence.steps:
+                counts[step.actor] += 1
+                if step.target:
+                    counts[step.target] += 1
         return dict(counts)
 
     # ── Phase 2 helpers ─────────────────────────────────────────────────
@@ -225,7 +226,8 @@ class KeyConceptsBuilder:
             ]
             relevant_flows = [
                 f"Step {step.step_order}: {step.actor} → {step.target or '—'}: {step.action}"
-                for step in knowledge_model.flow_sequences
+                for sequence in knowledge_model.flow_sequences
+                for step in sequence.steps
                 if step.actor.lower() == concept.term.lower()
                 or (step.target and step.target.lower() == concept.term.lower())
             ]
@@ -265,13 +267,14 @@ class KeyConceptsBuilder:
                         seen.add(text)
                         snippets.append(text)
 
-            for step in knowledge_model.flow_sequences:
-                if (step.actor.lower() == concept.term.lower()
-                        or (step.target and step.target.lower() == concept.term.lower())):
-                    text = f"[Flow step {step.step_order}] {step.actor} → {step.target or '—'}: {step.action}"
-                    if text not in seen:
-                        seen.add(text)
-                        snippets.append(text)
+            for sequence in knowledge_model.flow_sequences:
+                for step in sequence.steps:
+                    if (step.actor.lower() == concept.term.lower()
+                            or (step.target and step.target.lower() == concept.term.lower())):
+                        text = f"[Flow step {step.step_order}] {step.actor} → {step.target or '—'}: {step.action}"
+                        if text not in seen:
+                            seen.add(text)
+                            snippets.append(text)
 
         return "\n".join(snippets)
 
@@ -300,13 +303,14 @@ class KeyConceptsBuilder:
                     f"{rel.source} interacts with {concept.term}: {rel.label}"
                 )
 
-        for step in knowledge_model.flow_sequences:
-            if step.actor.lower() == concept.term.lower():
-                return self._sentence(f"{concept.term} performs: {step.action}")
-            if step.target and step.target.lower() == concept.term.lower():
-                return self._sentence(
-                    f"{concept.term} receives: {step.action} from {step.actor}"
-                )
+        for sequence in knowledge_model.flow_sequences:
+            for step in sequence.steps:
+                if step.actor.lower() == concept.term.lower():
+                    return self._sentence(f"{concept.term} performs: {step.action}")
+                if step.target and step.target.lower() == concept.term.lower():
+                    return self._sentence(
+                        f"{concept.term} receives: {step.action} from {step.actor}"
+                    )
 
         return self._sentence(
             f"{concept.term} is a key concept in this system architecture"
