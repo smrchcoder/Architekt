@@ -19,13 +19,13 @@ class Settings(BaseSettings):
     firecrawl_formats: str
 
     # LLM Settings
-    llm_provider: str = "openai"  # "openai", "gemini", etc.
+    llm_provider: str = "openai"
     openai_api_key: str | None = None
-    openai_api_base: str | None = (
-        None  # to support custom endpoints (Ollama, OpenRouter, etc.)
-    )
+    openai_api_base: str | None = None
     gemini_api_key: str | None = None
     llm_model: str = "gpt-4o"
+    extraction_model: str = "gpt-4o"
+    section_model: str = "gpt-4o-mini"
     cors_origins: str | None = None
 
 

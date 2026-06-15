@@ -33,7 +33,7 @@ class ConceptEnrichment(BaseModel):
 
 class KeyConceptsEnrichment(BaseModel):
     concepts: list[ConceptEnrichment] = Field(
-        ..., min_length=2, max_length=8, description="Enriched concepts in the same order as input"
+        ..., min_length=2, max_length=12, description="Enriched concepts in the same order as input"
     )
 
 
@@ -41,6 +41,6 @@ class KeyConceptsSection(BaseModel):
     concepts: list[ConceptEntry] = Field(
         ...,
         min_length=2,
-        max_length=8,
+        max_length=12,
         description="Ranked list of load-bearing concepts for this article",
     )

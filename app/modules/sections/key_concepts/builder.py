@@ -5,10 +5,12 @@ import re
 from collections import Counter
 from typing import Any
 
+from app.core.config import settings
 from app.llm import LLMClient
 from app.logging_config import get_logger
 from app.modules.extractor.models.knowledge_model import (
     ConceptDef,
+    ConceptKind,
     EntityType,
     KnowledgeModel,
     NamedEntity,
@@ -29,6 +31,13 @@ GENERIC_TERMS: set[str] = {
     "api", "rest", "json", "http", "https", "microservice", "microservices",
     "database", "server", "client", "tcp", "udp", "rpc", "sdk", "sla",
     "load balancer", "cache", "docker", "kubernetes", "k8s",
+}
+
+CONCEPT_KIND_WEIGHTS: dict[ConceptKind, int] = {
+    ConceptKind.ARCHITECTURAL_CONCERN: 12,
+    ConceptKind.DESIGN_PATTERN: 8,
+    ConceptKind.DOMAIN_ABSTRACTION: 5,
+    ConceptKind.IMPLEMENTATION_DETAIL: 1,
 }
 
 _log = get_logger(__name__)
@@ -66,11 +75,12 @@ class KeyConceptsBuilder:
             ref_total = relationship_refs.get(concept.term, 0) + flow_refs.get(concept.term, 0)
             if is_generic and ref_total == 0 and concept.usage_count <= 2:
                 continue
-            score = concept.usage_count + (ref_total * 2)
+            base_weight = CONCEPT_KIND_WEIGHTS.get(concept.concept_kind, 3)
+            score = base_weight + concept.usage_count + ref_total
             concept_score_list.append((score, concept))
 
         concept_score_list.sort(key=lambda x: x[0], reverse=True)
-        selected = concept_score_list[:8]
+        selected = concept_score_list[:12]
 
         log.info(
             "section_2:phase_1_complete | scored=%d | selected=%d | dropped_generic=%d",
@@ -107,6 +117,7 @@ class KeyConceptsBuilder:
                 response_model=KeyConceptsEnrichment,
                 temperature=0.4,
                 validation_retries=2,
+                model=settings.section_model,
             )
             enriched_map: dict[str, ConceptEnrichment] = {
                 e.id: e for e in enrichment.concepts
@@ -223,6 +234,7 @@ class KeyConceptsBuilder:
                 "term": concept.term,
                 "category": concept.category_hint.value,
                 "difficulty": concept.difficulty_hint.value,
+                "concept_kind": concept.concept_kind.value,
                 "usage_count": concept.usage_count,
                 "inline_definition": concept.inline_definition,
                 "first_mention_context": entity.first_mention_context if entity else None,

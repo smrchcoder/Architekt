@@ -112,6 +112,10 @@ Distinct from pain_points — constraints are the RULES, pain_points are the SYM
 Phrases where the authors discuss a deliberate cost/benefit choice. \
 Look for: "at the cost of", "the downside is", "we chose X over Y because", \
 "this adds complexity but", "we accepted the tradeoff".
+Each entry may be a plain string OR a structured object with:
+  description — the tradeoff as described
+  benefit     — what was gained (null if not stated)
+  cost        — what was given up (null if not stated)
 These feed directly into Section 6 (Tradeoffs & Key Learnings).
 
 ── flow_sequences ──────────────────────────────────
@@ -133,10 +137,40 @@ Examples: "40+ ML use cases", "hundreds of millions of members globally", \
 "10M RPS at peak".
 
 ── concept_definitions ─────────────────────────────
-Technical terms that a mid-level engineer may not immediately recognise \
-that are LOAD-BEARING for understanding this article. Skip generic terms \
-(API, REST, JSON, microservice). Prioritise domain-specific abstractions \
-the company invented or uses in a specific way. Min 2, max 8 items.
+Extract concepts that are necessary to understand the system. A concept may be:
+
+1. DOMAIN_ABSTRACTION   — A company-specific term, abstraction, or named concept
+                          the system invents or uses in a specific way.
+                          Example: "Input Gate", "Routing Key", "Objective"
+
+2. ARCHITECTURAL_CONCERN — A foundational computer-science concern that this
+                          system's design exists primarily to solve. These should
+                          be extracted EVEN IF they are not company-specific or
+                          explicitly capitalized in the article. The fact that
+                          the system's architecture is shaped around these concerns
+                          makes them load-bearing for understanding WHY the system
+                          looks the way it does.
+                          Examples: Race Conditions, Concurrency, Consistency,
+                                   Isolation, Durability, Idempotency, Backpressure,
+                                   Single Point of Failure, Fault Tolerance,
+                                   Latency, Throughput, Availability
+
+3. DESIGN_PATTERN       — A named pattern or technique the system uses.
+                          Example: Sidecar, Circuit Breaker, Consistent Hashing
+
+4. IMPLEMENTATION_DETAIL — A specific API field, configuration flag, or code-level
+                          detail. Extract these ONLY if they are genuinely necessary
+                          to understand the system. Do NOT extract them unless
+                          the article treats them as central.
+
+IMPORTANT RANKING RULE:
+Architectural concerns (type 2) carry more weight than implementation details
+(type 4). If the article's design exists primarily to solve a concern like
+"consistency" or "race conditions", that concern MUST be extracted even if it
+is never inside backticks or capitalised. The system's purpose IS the concern.
+
+Set concept_kind to the appropriate enum value:
+  "domain_abstraction" | "architectural_concern" | "design_pattern" | "implementation_detail"
 
 inline_definition: If the article itself defines or explains the term in \
 its own words, copy that explanation verbatim here. If the article uses \
@@ -157,6 +191,9 @@ difficulty_hint options:
   "foundational"   → most mid-level engineers will know this
   "intermediate"   → specialist knowledge, needs 2–3 years in the domain
   "advanced"       → deep expert knowledge, few engineers know this cold
+
+Min 2, max 12 items. Include both architectural concerns AND domain
+abstractions — one category should not displace the other.
 
 ── layer_signals ───────────────────────────────────
 If the article describes components in terms of architectural tiers or \
