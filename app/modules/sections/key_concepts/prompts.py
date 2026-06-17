@@ -1,4 +1,4 @@
-"""Prompts for AI CALL 2 — Section 2: Key Concepts enrichment.
+"""Prompts for Section 2: Key Concepts enrichment.
 
 The deterministic builder pre-selects and ranks concepts from the KnowledgeModel.
 This LLM pass enriches only the narrative fields (short_def, why_it_matters) by
@@ -33,21 +33,62 @@ in the article. Do not write generic importance — make it specific to this \
 system's story.
 
 ═══════════════════════════════════════════════════
-GROUNDING RULES
+HARD RULES — NEVER violate these
 ═══════════════════════════════════════════════════
 
-1. Every fact in short_def and why_it_matters MUST be traceable to something \
-   stated in the provided article excerpts or concept facts. Do not invent \
-   capabilities, benefits, or properties the article does not mention.
+1. Every claim in short_def and why_it_matters MUST be traceable to something \
+stated in the provided article excerpts or concept facts. Do not invent \
+capabilities, benefits, properties, or numbers the article does not mention. \
+If the context is thin for a concept, write an honest, shorter definition \
+rather than padding with plausible-sounding speculation.
 
-2. Do not introduce new systems, components, or relationships that are not \
-   in the provided context.
+2. Do not write generic encyclopedia definitions. "A database is a structured \
+collection of data" is useless. "This article's system stores task state in \
+PostgreSQL with strict serializability guarantees" is useful. Every definition \
+must reflect how THIS article uses the term.
 
-3. If the article context is thin for a particular concept, write a shorter, \
-   honest definition rather than padding with speculation.
+3. Do not introduce new systems, components, teams, or relationships that do \
+not appear in the provided context. If you need to reference another component, \
+it must be one already listed in the concept facts or article excerpts.
 
-4. Return concepts in the EXACT SAME ORDER as provided in the input. \
-   Use the matching id field to link back.
+4. Return concepts in the EXACT SAME ORDER as provided in the input. Use the \
+matching id field from the input to link each enrichment back to its concept.
+
+5. why_it_matters must connect the concept to the article's specific problem, \
+architecture, or tradeoffs — not to generic software engineering importance. \
+If the article describes a system built to handle 10M concurrent WebSocket \
+connections, the why_it_matters for "backpressure" should explain how \
+backpressure prevents overload in THAT system, not why backpressure is \
+generally useful.
+
+═══════════════════════════════════════════════════
+FAILURE MODES TO AVOID
+═══════════════════════════════════════════════════
+
+BAD (generic encyclopedia definition):
+  short_def: "A load balancer distributes incoming network traffic across \
+multiple servers to ensure reliability and performance."
+  why_it_matters: "Load balancers are essential for scalable web applications."
+
+GOOD (article-grounded):
+  short_def: "The article's architecture uses NGINX as a layer-7 load balancer \
+that routes gRPC streams to backend workers based on consistent hashing of \
+the session token."
+  why_it_matters: "The consistent hashing strategy is critical to this system \
+because it ensures all gRPC frames for a session land on the same worker, \
+avoiding the need for cross-worker coordination."
+
+BAD (vague, invented capability):
+  short_def: "Redis is used as a distributed cache with automatic failover \
+and sharding."
+  why_it_matters: "Caching is important for reducing database load."
+
+GOOD (specific to article's usage):
+  short_def: "In this system, Redis stores ephemeral session state with a \
+5-minute TTL, acting as a write-through cache in front of PostgreSQL."
+  why_it_matters: "The 5-minute TTL caps the staleness window for session \
+state, letting the system recover cleanly when workers are rescheduled — \
+a deliberate tradeoff against strong consistency."
 """
 
 

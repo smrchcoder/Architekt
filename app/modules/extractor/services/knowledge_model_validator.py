@@ -145,13 +145,13 @@ class KnowledgeModelValidator:
                 f"relationships[{index}].source",
                 relationship.source,
                 entity_name_set,
-                errors,
+                warnings,
             )
             self._validate_reference(
                 f"relationships[{index}].target",
                 relationship.target,
                 entity_name_set,
-                errors,
+                warnings,
             )
 
         for seq_index, sequence in enumerate(knowledge_model.flow_sequences):
@@ -166,14 +166,14 @@ class KnowledgeModelValidator:
                     f"{step_label}.actor",
                     step.actor,
                     entity_name_set,
-                    errors,
+                    warnings,
                 )
                 if step.target:
                     self._validate_reference(
                         f"{step_label}.target",
                         step.target,
                         entity_name_set,
-                        errors,
+                        warnings,
                     )
 
         for index, layer in enumerate(knowledge_model.layer_signals):

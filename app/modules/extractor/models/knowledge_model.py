@@ -10,8 +10,11 @@ from pydantic import BaseModel, Field
 
 class EntityType(str, Enum):
     COMPANY = "company"
+    PRODUCT = "product"
     INTERNAL_SYSTEM = "internal_system"
     EXTERNAL_TOOL = "external_tool"
+    VENDOR_TOOL = "vendor_tool"
+    FRAMEWORK = "framework"
     DATA_STORE = "data_store"
     PROTOCOL = "protocol"
     TEAM = "team"

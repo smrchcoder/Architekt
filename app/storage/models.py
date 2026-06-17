@@ -74,6 +74,7 @@ class ProcessingRun(Base):
     section_4_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     section_5_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     section_6_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    knowledge_model_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     request_payload: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(

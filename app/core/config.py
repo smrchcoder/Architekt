@@ -33,7 +33,7 @@ class Settings(BaseSettings):
 
     # Confidence Gating
     extraction_confidence_threshold: float = 0.75
-    extraction_max_retries_per_pass: int = 3
+    extraction_max_retries_per_pass: int = 1
 
 
 settings = Settings()

@@ -104,9 +104,9 @@ class ConfidenceScorer:
 
     @staticmethod
     def _entity_density(data: BaseModel) -> float:
-        """Score entity count against a baseline of 4 (saturates at 1.0)."""
+        """Score entity count against a baseline of 15 (saturates at 1.0)."""
         entities = getattr(data, "named_entities", [])
-        return min(1.0, len(entities) / 4.0)
+        return min(1.0, len(entities) / 15.0)
 
     @staticmethod
     def _concept_completeness(data: BaseModel) -> float:

@@ -20,7 +20,11 @@ from app.modules.orchestrator.schemas import (
     PipelineRunCreate,
     ProcessingRunRead,
 )
+from app.modules.sections.architecture.builder import ArchitectureBuilder
+from app.modules.sections.flow.builder import FlowBuilder
 from app.modules.sections.key_concepts.builder import KeyConceptsBuilder
+from app.modules.sections.problem_statement.builder import ProblemStatementBuilder
+from app.modules.sections.tradeoffs.builder import TradeoffsBuilder
 from app.storage.db import SessionLocal
 from app.storage.models import ProcessingRun
 
@@ -70,10 +74,10 @@ class OrchestratorService:
         self.section_builders = {
             "section_1": section_1_builder or OverviewSectionBuilder(),
             "section_2": section_2_builder or KeyConceptsBuilder(),
-            "section_3": section_3_builder,
-            "section_4": section_4_builder,
-            "section_5": section_5_builder,
-            "section_6": section_6_builder,
+            "section_3": section_3_builder or ProblemStatementBuilder(),
+            "section_4": section_4_builder or ArchitectureBuilder(),
+            "section_5": section_5_builder or FlowBuilder(),
+            "section_6": section_6_builder or TradeoffsBuilder(),
         }
 
     def create_pipeline_run(
@@ -180,6 +184,10 @@ class OrchestratorService:
                 len(knowledge_model.extraction_warnings),
             )
 
+            run = self._require_run(db, run_id)
+            run.knowledge_model_json = knowledge_model.model_dump(mode="json")
+            db.commit()
+
             # ── Steps 4-9: Section Builders ─────────────────────────────
             section_pipeline = [
                 (STEP_SECTION_1_OVERVIEW, "section_1", 35, 2),
@@ -245,6 +253,7 @@ class OrchestratorService:
             section_5=run.section_5_json,
             section_6=run.section_6_json,
             error_message=run.error_message,
+            knowledge_model=run.knowledge_model_json,
             created_at=run.created_at,
             updated_at=run.updated_at,
         )

@@ -23,8 +23,8 @@ class RecognitionOutput(BaseModel):
     named_entities: list[NamedEntity] = Field(
         default_factory=list,
         min_length=2,
-        max_length=20,
-        description="Every explicitly named system, service, tool, protocol, company, or team that plays a meaningful role in the article",
+        max_length=40,
+        description="Every explicitly named system, service, tool, protocol, company, product, or team that plays any role in the article — including infrastructure dependencies and tools mentioned in passing",
     )
     concept_definitions: list[ConceptDef] = Field(
         default_factory=list,
