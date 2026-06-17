@@ -185,7 +185,6 @@ class OrchestratorService:
             )
 
             run = self._require_run(db, run_id)
-            run.knowledge_model_json = knowledge_model.model_dump(mode="json")
             db.commit()
 
             # ── Steps 4-9: Section Builders ─────────────────────────────
@@ -253,7 +252,6 @@ class OrchestratorService:
             section_5=run.section_5_json,
             section_6=run.section_6_json,
             error_message=run.error_message,
-            knowledge_model=run.knowledge_model_json,
             created_at=run.created_at,
             updated_at=run.updated_at,
         )

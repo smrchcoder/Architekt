@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, HttpUrl, model_validator
+from pydantic import BaseModel, HttpUrl, model_validator
 
 
 class ArticleCreate(BaseModel):
@@ -14,21 +14,3 @@ class ArticleCreate(BaseModel):
         if bool(self.source_url) == bool(self.raw_text):
             raise ValueError("provide exactly one of source_url or raw_text")
         return self
-
-
-class ArticleRead(BaseModel):
-    article_id: str
-    source_url: str | None
-    raw_text: str | None
-    cleaned_text: str | None
-    word_count: int
-    processing_time: int | None
-    source_title: str | None
-    source_domain: str | None
-    media_items: list[dict] | None = None
-    extraction_warnings: list[str] | None = None
-
-
-class ArticleIngestResponse(BaseModel):
-    article: ArticleRead
-    message: str = Field(default="ingested")
