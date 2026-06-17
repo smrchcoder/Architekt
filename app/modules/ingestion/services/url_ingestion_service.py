@@ -44,13 +44,19 @@ class UrlIngestionService:
             host = urlparse(source_url).netloc.lower()
             source_domain = host[4:] if host.startswith("www.") else host
 
+        source_title = payload.source_title or scrape.source_title
+
         article = Article(
             source_url=source_url,
             raw_text=raw_text,
             cleaned_text=cleaned_text or None,
             word_count=word_count,
             processing_time=scrape.elapsed_ms,
-            source_title=payload.source_title,
+            source_title=source_title,
             source_domain=source_domain,
+            media_items=[
+                item.model_dump(mode="json") for item in scrape.media_items
+            ] or None,
+            extraction_warnings=scrape.extraction_warnings or None,
         )
         return self.repo.create(db, article)

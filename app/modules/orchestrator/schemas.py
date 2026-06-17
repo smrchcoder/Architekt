@@ -34,6 +34,7 @@ class ProcessingRunRead(BaseModel):
     section_4: dict[str, Any] | None = None
     section_5: dict[str, Any] | None = None
     section_6: dict[str, Any] | None = None
+    knowledge_model: dict[str, Any] | None = None
     error_message: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None

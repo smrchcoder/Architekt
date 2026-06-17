@@ -23,6 +23,8 @@ class Article(Base):
     processing_time: Mapped[int | None] = mapped_column(Integer, nullable=True)
     source_title: Mapped[str | None] = mapped_column(String(512), nullable=True)
     source_domain: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    media_items: Mapped[Any | None] = mapped_column(JSON, nullable=True)
+    extraction_warnings: Mapped[Any | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -40,6 +42,9 @@ class KnowledgeModelRecord(Base):
     )
     source_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     raw_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    pass_1_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    pass_2_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    pass_3_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -69,6 +74,7 @@ class ProcessingRun(Base):
     section_4_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     section_5_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     section_6_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    knowledge_model_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     request_payload: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(

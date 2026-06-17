@@ -31,6 +31,8 @@ def ingest_article(payload: ArticleCreate, db: Session = Depends(get_db)):
             processing_time=article.processing_time,
             source_title=article.source_title,
             source_domain=article.source_domain,
+            media_items=article.media_items,
+            extraction_warnings=article.extraction_warnings,
         )
     )
 
@@ -50,4 +52,6 @@ def get_article(article_id: str, db: Session = Depends(get_db)):
         processing_time=article.processing_time,
         source_title=article.source_title,
         source_domain=article.source_domain,
+        media_items=article.media_items,
+        extraction_warnings=article.extraction_warnings,
     )

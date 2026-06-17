@@ -26,13 +26,15 @@ class OverviewSectionBuilder:
         domain = self._build_domain_tags(knowledge_model)
         reading_time_min = max(1, ceil((article.word_count or 0) / 230))
         strongest_problem = knowledge_model.problem_signals[0]
-        motivation = self._motivation_text(knowledge_model)
+        core_problem = getattr(knowledge_model, "core_problem", None)
+        article_summary = getattr(knowledge_model, "article_summary", None)
+        motivation = self._motivation_text(knowledge_model, core_problem)
 
         return OverviewSection(
             one_line_summary=self._one_line_summary(
                 company=company,
                 system_name=primary_system.name,
-                problem=strongest_problem,
+                problem=core_problem or strongest_problem,
             ),
             system_name=primary_system.name,
             company=company,
@@ -42,8 +44,11 @@ class OverviewSectionBuilder:
                 system_name=primary_system.name,
                 problem=strongest_problem,
                 knowledge_model=knowledge_model,
+                article_summary=article_summary,
             ),
-            why_it_exists=motivation or self._sentence(strongest_problem),
+            why_it_exists=core_problem
+            or motivation
+            or self._sentence(strongest_problem),
             reading_time_min=reading_time_min,
         )
 
@@ -82,7 +87,7 @@ class OverviewSectionBuilder:
             CategoryHint.ALGORITHM: "Algorithms",
         }
         for concept in knowledge_model.concept_definitions:
-            self._append_unique(tags, category_tags[concept.category_hint])
+            self._append_unique(tags, category_tags.get(concept.category_hint, "Other"))
 
         layer_text = " ".join(layer.layer_name.lower() for layer in knowledge_model.layer_signals)
         layer_tags = [
@@ -104,7 +109,9 @@ class OverviewSectionBuilder:
             self._append_unique(tags, "Software Architecture")
         return tags[:3]
 
-    def _motivation_text(self, knowledge_model: KnowledgeModel) -> str | None:
+    def _motivation_text(self, knowledge_model: KnowledgeModel, core_problem: str | None = None) -> str | None:
+        if core_problem:
+            return self._sentence(core_problem)
         motivations = [
             signal.description
             for signal in knowledge_model.temporal_signals
@@ -125,7 +132,10 @@ class OverviewSectionBuilder:
         system_name: str,
         problem: str,
         knowledge_model: KnowledgeModel,
+        article_summary: str | None = None,
     ) -> str:
+        if article_summary:
+            return article_summary
         sentences = [
             self._sentence(f"{company} discusses {system_name} in this engineering article"),
             self._sentence(f"The core problem was {problem}"),
