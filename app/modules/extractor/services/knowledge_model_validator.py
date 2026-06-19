@@ -29,6 +29,7 @@ class KnowledgeModelValidationResult:
     Attributes:
         valid: True if no hard errors were found.
         errors: Human-readable error messages, keyed by field path.
+        warnings: Quality checklist warnings (non-failing).
         failing_pass: If cross-pass validation identifies a specific pass
             as the source of errors (e.g. 'structure'), the pass name;
             None otherwise.
@@ -36,13 +37,14 @@ class KnowledgeModelValidationResult:
 
     valid: bool
     errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
     failing_pass: str | None = None
 
 
 class KnowledgeModelValidator:
     """Validates KnowledgeModel instances for schema and semantic correctness.
 
-    Runs two levels of validation:
+    Runs three levels of validation:
 
     1. **Schema validation** (Pydantic-level): Ensures the raw JSON matches
        the KnowledgeModel type definition. Catches missing required fields,
@@ -53,7 +55,12 @@ class KnowledgeModelValidator:
        primary internal system, and that all relationship/flow/layer/temporal
        references point to valid entity names.
 
-    3. **Cross-pass validation** (``validate_cross_pass()``): Checks
+    3. **Quality checklist** (``validate()``): Checks items from the
+       Extraction Quality Checklist: no duplicate entities, stable IDs,
+       importance scores, architecture roles, evidence preservation,
+       flow-to-architecture linking, and meaningful layer names.
+
+    4. **Cross-pass validation** (``validate_cross_pass()``): Checks
        referential integrity after merge — all structure-pass references
        (relationships, flow steps, layers, temporal signals) must match
        entities extracted in the recognition pass. Returns ``failing_pass``
@@ -63,9 +70,15 @@ class KnowledgeModelValidator:
 
         validator = KnowledgeModelValidator()
         km = validator.validate_raw(raw_json_dict)    # raises if invalid
-        result = validator.validate(km)               # semantic checks
+        result = validator.validate(km)               # semantic checks + quality
         cross = validator.validate_cross_pass(km)     # cross-pass integrity
     """
+
+    # Generic layer names that should raise warnings
+    _GENERIC_LAYER_NAMES = {
+        "system layer", "other layer", "general layer", "misc layer",
+        "default layer", "unnamed layer", "layer",
+    }
 
     def validate_raw(self, raw_json: dict) -> KnowledgeModel:
         """Parse and validate raw JSON into a KnowledgeModel.
@@ -96,9 +109,9 @@ class KnowledgeModelValidator:
         return knowledge_model
 
     def validate(self, knowledge_model: KnowledgeModel) -> KnowledgeModelValidationResult:
-        """Run semantic validation checks on a parsed KnowledgeModel.
+        """Run semantic validation and quality checklist checks.
 
-        Checks performed:
+        Semantic checks:
             - Unique entity names and concept terms (no duplicates)
             - At most one internal_system marked is_primary
             - All relationship source/target references exist in named_entities
@@ -108,14 +121,24 @@ class KnowledgeModelValidator:
             - Temporal signal before/after entity references are validated
               (fuzzy match with parenthetical qualifier stripping)
 
-        Warnings (fuzzy reference failures) are appended to
-        ``knowledge_model.extraction_warnings`` rather than treated as errors.
+        Quality checklist checks (warnings, not errors):
+            - No duplicate entities remain after canonicalization
+            - Every entity has a stable ID
+            - Every relationship has a stable ID
+            - Every flow has a stable ID
+            - Every tradeoff has a stable ID
+            - Every concept has a stable ID
+            - High-importance entities (>=7) have evidence
+            - Every flow actor/target resolves to a known entity
+            - Layer names are meaningful (not generic)
+            - Architecture roles are assigned when possible
 
         Args:
             knowledge_model: The KnowledgeModel to validate.
 
         Returns:
-            A KnowledgeModelValidationResult.valid=True if no hard errors.
+            A KnowledgeModelValidationResult with semantic errors as
+            ``errors`` and quality warnings as ``warnings``.
 
         Raises:
             KnowledgeModelValidationError: If hard validation errors are found.
@@ -215,13 +238,151 @@ class KnowledgeModelValidator:
                     fuzzy=True,
                 )
 
+        # ── Extraction Quality Checklist ────────────────────────────────
+        quality_warnings = self._validate_quality_checklist(knowledge_model)
+        warnings.extend(quality_warnings)
+
         if warnings:
             knowledge_model.extraction_warnings.extend(warnings)
 
         if errors:
             raise KnowledgeModelValidationError(errors)
 
-        return KnowledgeModelValidationResult(valid=True)
+        return KnowledgeModelValidationResult(
+            valid=True,
+            warnings=quality_warnings,
+        )
+
+    def _validate_quality_checklist(
+        self, knowledge_model: KnowledgeModel
+    ) -> list[str]:
+        """Run the Extraction Quality Checklist and return warnings.
+
+        Checks:
+          1. No duplicate entities (via alias or fuzzy match)
+          2. Stable IDs on all objects
+          3. Importance scores on all entities
+          4. Evidence on high-importance entities (>=7)
+          5. Architecture roles on major entities
+          6. Flow-to-architecture linking (flow actors to entities)
+          7. Layer names are meaningful
+          8. Concepts have evidence
+        """
+        warnings: list[str] = []
+        entity_name_set = {e.name.lower(): e for e in knowledge_model.named_entities}
+
+        # ── 1. Duplicate entity detection ───────────────────────────────
+        for i, e1 in enumerate(knowledge_model.named_entities):
+            for e2 in knowledge_model.named_entities[i + 1 :]:
+                # Check if names overlap via alias or substring
+                e1_aliases_lower = {a.lower() for a in e1.aliases}
+                e2_aliases_lower = {a.lower() for a in e2.aliases}
+                shared_aliases = e1_aliases_lower & e2_aliases_lower
+
+                name_in_alias = e1.name.lower() in e2_aliases_lower or e2.name.lower() in e1_aliases_lower
+                substring_match = (
+                    len(e1.name) >= 4
+                    and len(e2.name) >= 4
+                    and (e1.name.lower() in e2.name.lower() or e2.name.lower() in e1.name.lower())
+                )
+
+                if name_in_alias or shared_aliases or substring_match:
+                    warnings.append(
+                        f"Potential duplicate entities remain after canonicalization: "
+                        f"'{e1.name}' and '{e2.name}' (shared aliases or fuzzy match). "
+                        f"Consider merging them."
+                    )
+
+        # ── 2. Stable IDs ───────────────────────────────────────────────
+        for i, entity in enumerate(knowledge_model.named_entities):
+            if not entity.id or entity.id == "ent_":
+                warnings.append(f"named_entities[{i}] missing stable ID")
+        for i, concept in enumerate(knowledge_model.concept_definitions):
+            if not concept.id or concept.id == "con_":
+                warnings.append(f"concept_definitions[{i}] missing stable ID")
+        for i, rel in enumerate(knowledge_model.relationships):
+            if not rel.id or rel.id == "rel_":
+                warnings.append(f"relationships[{i}] missing stable ID")
+        for i, flow in enumerate(knowledge_model.flow_sequences):
+            if not flow.id or flow.id == "flow_":
+                warnings.append(f"flow_sequences[{i}] missing stable ID")
+        for i, tradeoff in enumerate(knowledge_model.tradeoff_signals):
+            if not tradeoff.id or tradeoff.id == "trade_":
+                warnings.append(f"tradeoff_signals[{i}] missing stable ID")
+
+        # ── 3. Importance scores ────────────────────────────────────────
+        for i, entity in enumerate(knowledge_model.named_entities):
+            if entity.importance < 1 or entity.importance > 10:
+                warnings.append(
+                    f"named_entities[{i}] '{entity.name}' has invalid importance "
+                    f"({entity.importance}), expected 1-10"
+                )
+
+        # ── 4. Evidence on high-importance entities ─────────────────────
+        for i, entity in enumerate(knowledge_model.named_entities):
+            if entity.importance >= 7 and not entity.evidence:
+                warnings.append(
+                    f"named_entities[{i}] '{entity.name}' has importance={entity.importance} "
+                    f"but no evidence excerpt. Add evidence for UI traceability."
+                )
+
+        # ── 5. Architecture roles ───────────────────────────────────────
+        null_role_entities = [
+            e for e in knowledge_model.named_entities
+            if e.architecture_role is None and e.entity_type != EntityType.CONCEPT
+        ]
+        if null_role_entities and len(null_role_entities) > len(knowledge_model.named_entities) * 0.5:
+            warnings.append(
+                f"{len(null_role_entities)}/{len(knowledge_model.named_entities)} entities "
+                f"have no architecture_role. Consider assigning roles for better "
+                f"visual classification."
+            )
+
+        # ── 6. Flow-to-architecture linking ─────────────────────────────
+        entity_names_exact = {e.name for e in knowledge_model.named_entities}
+        for seq_idx, seq in enumerate(knowledge_model.flow_sequences):
+            for step_idx, step in enumerate(seq.steps):
+                if step.actor not in entity_names_exact:
+                    # Try fuzzy match
+                    fuzzy_match = any(
+                        step.actor.lower() in name.lower() or name.lower() in step.actor.lower()
+                        for name in entity_names_exact
+                    )
+                    if not fuzzy_match:
+                        warnings.append(
+                            f"flow_sequences[{seq_idx}].steps[{step_idx}].actor "
+                            f"'{step.actor}' does not resolve to any named entity. "
+                            f"This breaks flow-to-architecture linking in the UI."
+                        )
+                if step.target and step.target not in entity_names_exact:
+                    fuzzy_match = any(
+                        step.target.lower() in name.lower() or name.lower() in step.target.lower()
+                        for name in entity_names_exact
+                    )
+                    if not fuzzy_match:
+                        warnings.append(
+                            f"flow_sequences[{seq_idx}].steps[{step_idx}].target "
+                            f"'{step.target}' does not resolve to any named entity. "
+                            f"This breaks flow-to-architecture linking in the UI."
+                        )
+
+        # ── 7. Layer name quality ───────────────────────────────────────
+        for i, layer in enumerate(knowledge_model.layer_signals):
+            if layer.layer_name.lower() in self._GENERIC_LAYER_NAMES:
+                warnings.append(
+                    f"layer_signals[{i}] has generic layer name '{layer.layer_name}'. "
+                    f"Use a more meaningful architectural boundary name."
+                )
+
+        # ── 8. Concept evidence ─────────────────────────────────────────
+        for i, concept in enumerate(knowledge_model.concept_definitions):
+            if not concept.evidence:
+                warnings.append(
+                    f"concept_definitions[{i}] '{concept.term}' has no evidence excerpt. "
+                    f"Add evidence for UI traceability."
+                )
+
+        return warnings
 
     def validate_cross_pass(
         self, knowledge_model: KnowledgeModel

@@ -58,6 +58,15 @@ If you find yourself writing an entity name in a tradeoff description, make \
 sure you're describing WHY, not WHAT or HOW. If the tradeoff description \
 reads like a relationship or flow step, it belongs in Pass 2 — remove it.
 
+7. Evidence enables UI traceability. For every tradeoff, include a supporting \
+evidence excerpt — a verbatim sentence from the article that describes this \
+design decision. This powers citations, source highlighting, and hover \
+explanations in downstream visual features.
+
+8. Stable IDs for visual systems. Every tradeoff must have a deterministic \
+stable ID. Pattern: trade_{snake_case_short_description}. Derive IDs from \
+content, never use random values.
+
 ═══════════════════════════════════════════════════
 FIELD-BY-FIELD GUIDANCE
 ═══════════════════════════════════════════════════
@@ -65,6 +74,11 @@ FIELD-BY-FIELD GUIDANCE
 ── tradeoff_signals ──────────────────────────────
 Design decisions where the authors accepted a cost in exchange for a benefit. \
 Each tradeoff captures the tension between two competing concerns.
+
+  id: Generate a deterministic stable ID. Pattern: \
+trade_{snake_case_short_description}. Example: "The team chose eventual \
+consistency over strong consistency for the write path" → \
+"trade_eventual_consistency_write_path". Keep it concise but unique.
 
   description: One sentence capturing the tension (e.g. "The team chose \
 eventual consistency over strong consistency for the write path")
@@ -77,6 +91,10 @@ specific about HOW complexity increased or what capability was lost.
 
   condition: The threshold or scenario where this tradeoff holds or breaks \
 down. Critical for scale-sensitive designs. Leave null if not mentioned.
+
+  evidence: A verbatim supporting excerpt from the article that describes \
+this tradeoff. Use the specific sentence or passage where the article \
+discusses the design decision.
 
 Max 8 tradeoffs. Order by significance — most impactful first. If the article \
 discusses the same tradeoff from multiple angles, consolidate into one entry.
@@ -134,15 +152,16 @@ gained at the expense of something else.
 2. For each candidate tradeoff, verify you can articulate BOTH a specific \
 benefit and a specific cost. Discard candidates where you can only describe \
 one side.
-3. Populate tradeoff_signals — description, benefit, cost, condition (if any). \
-Order by significance.
+3. Populate tradeoff_signals — id, description, benefit, cost, condition (if \
+any), evidence. Order by significance.
 4. Scan for constraint language ("must", "required", "cannot", "SLA", "SLO", \
 "compliance", "backward compatible", "zero downtime"). Extract constraint_signals.
 5. Set confidence_score honestly based on tradeoff completeness and constraint \
 clarity. If no real design decisions exist, score low and warn.
-6. Validate: are any tradeoffs missing a benefit or cost? Did you accidentally \
-extract entities, relationships, or flows? Are any constraints actually goals \
-or symptoms? Remove anything that doesn't belong.
+6. Validate: does every tradeoff have a stable ID and evidence? Are any \
+tradeoffs missing a benefit or cost? Did you accidentally extract entities, \
+relationships, or flows? Are any constraints actually goals or symptoms? \
+Remove anything that doesn't belong.
 """
 
 

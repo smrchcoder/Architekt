@@ -21,6 +21,24 @@ class EntityType(str, Enum):
     CONCEPT = "concept"
 
 
+class ArchitectureRole(str, Enum):
+    SERVICE = "service"
+    DATASTORE = "datastore"
+    QUEUE = "queue"
+    WORKER = "worker"
+    SCHEDULER = "scheduler"
+    API = "api"
+    CLIENT = "client"
+    BATCH_JOB = "batch_job"
+    STREAM_PROCESSOR = "stream_processor"
+    INFRASTRUCTURE_COMPONENT = "infrastructure_component"
+    GATEWAY = "gateway"
+    CACHE = "cache"
+    ORCHESTRATOR = "orchestrator"
+    PROXY = "proxy"
+    AGENT = "agent"
+
+
 class InteractionType(str, Enum):
     SYNC_CALL = "sync_call"
     ASYNC_EVENT = "async_event"
@@ -72,13 +90,27 @@ class SectionRelevance(str, Enum):
 
 
 class NamedEntity(BaseModel):
+    id: str = Field(
+        ...,
+        description="Stable machine identifier for visual systems. Pattern: 'ent_{slugified_name}' e.g. 'ent_apache_cassandra'. Must be deterministic from the entity name.",
+    )
     name: str = Field(
         ...,
-        description="Exactly as it appears in the article",
+        description="Canonical name of the entity. If the article uses multiple names for the same thing, pick the most precise one and list alternatives in aliases.",
     )
     entity_type: EntityType = Field(
         ...,
         description="Classification of what kind of entity this is",
+    )
+    architecture_role: ArchitectureRole | None = Field(
+        default=None,
+        description="The architectural role this entity plays — service, datastore, queue, worker, scheduler, api, client, batch_job, stream_processor, infrastructure_component, gateway, cache, orchestrator, proxy, or agent. Set to null if the role is not discernible.",
+    )
+    importance: int = Field(
+        default=5,
+        ge=1,
+        le=10,
+        description="Relative importance of this entity in the architecture on a scale of 1 (minor) to 10 (central). Based on: centrality in relationships, frequency of mentions, role in the architecture, and participation across flows.",
     )
     description: str = Field(
         ...,
@@ -94,11 +126,19 @@ class NamedEntity(BaseModel):
     )
     aliases: list[str] = Field(
         default_factory=list,
-        description="Alternative names or abbreviations used for this entity elsewhere in the article",
+        description="Alternative names or abbreviations used for this entity elsewhere in the article. Consolidate all references to the same thing here.",
+    )
+    evidence: str | None = Field(
+        default=None,
+        description="A supporting excerpt from the article that establishes or justifies this entity's existence and role. Used for citations, source highlighting, and hover explanations in the UI.",
     )
 
 
 class ConceptDef(BaseModel):
+    id: str = Field(
+        ...,
+        description="Stable machine identifier for visual systems. Pattern: 'con_{slugified_term}' e.g. 'con_eventual_consistency'. Must be deterministic from the term.",
+    )
     term: str = Field(
         ...,
         description="The technical term exactly as used in the article",
@@ -124,6 +164,10 @@ class ConceptDef(BaseModel):
         ge=1,
         description="Approximate number of times this term appears or is referenced in the article",
     )
+    evidence: str | None = Field(
+        default=None,
+        description="A supporting excerpt from the article that demonstrates this concept in use. Used for citations and hover explanations in the UI.",
+    )
 
 
 class QuoteSignal(BaseModel):
@@ -142,6 +186,10 @@ class QuoteSignal(BaseModel):
 
 
 class Relationship(BaseModel):
+    id: str = Field(
+        ...,
+        description="Stable machine identifier for visual systems. Pattern: 'rel_{source}_{target}' e.g. 'rel_cassandra_kafka'. Must be deterministic from source and target names.",
+    )
     source: str = Field(
         ...,
         description="Name of the source entity. Must exactly match a NamedEntity.name from Pass 1.",
@@ -189,6 +237,10 @@ class FlowStep(BaseModel):
 
 
 class FlowSequence(BaseModel):
+    id: str = Field(
+        ...,
+        description="Stable machine identifier for visual systems. Pattern: 'flow_{slugified_flow_name}' e.g. 'flow_write_path'. Must be deterministic from the flow name.",
+    )
     flow_name: str = Field(
         ...,
         description="Short descriptive name for this flow, e.g. 'Write path', 'Auth handshake', 'Failure recovery'",
@@ -247,6 +299,10 @@ class TemporalSignal(BaseModel):
 
 
 class TradeoffItem(BaseModel):
+    id: str = Field(
+        ...,
+        description="Stable machine identifier for visual systems. Pattern: 'trade_{slugified_description_short}' e.g. 'trade_eventual_consistency'. Must be deterministic from the description.",
+    )
     description: str = Field(
         ...,
         description="The tradeoff as stated or implied in the article. One sentence capturing the tension.",
@@ -263,6 +319,10 @@ class TradeoffItem(BaseModel):
         default=None,
         description="The condition or scale threshold under which this tradeoff holds or breaks down, if mentioned",
     )
+    evidence: str | None = Field(
+        default=None,
+        description="A supporting excerpt from the article that describes this tradeoff. Used for citations, source highlighting, and hover explanations in the UI.",
+    )
 
 
 # ── Root model ─────────────────────────────────────────────────────────────────
@@ -270,7 +330,7 @@ class TradeoffItem(BaseModel):
 
 class KnowledgeModel(BaseModel):
 
-    schema_version: Literal[2] = 2
+    schema_version: Literal[3] = 3
 
     # -- Pass 1 fields -----------------------------------------------------------
 
@@ -286,13 +346,13 @@ class KnowledgeModel(BaseModel):
         default_factory=list,
         min_length=2,
         max_length=20,
-        description="Every explicitly named system, service, tool, protocol, company, or team that plays a meaningful role in the article",
+        description="Canonicalized list of every explicitly named system, service, tool, protocol, company, or team. No duplicate entities — each entity appears exactly once with its canonical name and alternative names stored in aliases. Each entity has a stable ID, architecture role, importance score, and supporting evidence.",
     )
     concept_definitions: list[ConceptDef] = Field(
         default_factory=list,
         min_length=2,
         max_length=12,
-        description="Load-bearing technical concepts a reader needs to understand to follow the article. Exclude concepts that are merely mentioned in passing.",
+        description="Load-bearing technical concepts a reader needs to understand to follow the article. Each concept has a stable ID and supporting evidence. Exclude concepts that are merely mentioned in passing.",
     )
     key_quotes: list[QuoteSignal] = Field(
         default_factory=list,
@@ -317,7 +377,7 @@ class KnowledgeModel(BaseModel):
         default_factory=list,
         min_length=1,
         max_length=30,
-        description="Directional relationships between named entities that are explicitly stated or clearly implied by the article. Source and target must match NamedEntity names.",
+        description="Structured, graph-ready edges between named entities. Each relationship has a stable ID, explicit source and target (matching NamedEntity names), interaction type, and a concise label. These are directly renderable as React Flow edges without further parsing.",
     )
     flow_sequences: list[FlowSequence] = Field(
         default_factory=list,

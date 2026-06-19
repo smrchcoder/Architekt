@@ -47,7 +47,41 @@ system or subject the article is fundamentally about. All other entities get \
 is_primary=false. If you cannot identify a clear primary, pick the entity \
 most central to the article's argument.
 
-6. Confidence means recall completeness. Score 1.0 only if you are confident \
+6. Entity canonicalization — MERGE, do not duplicate. If the article refers \
+to the same thing by multiple names (e.g. "Cassandra" and "Apache Cassandra", \
+"the query engine" and "the SQL engine"), consolidate them into a SINGLE \
+entity with the most precise canonical name. Store alternative names in the \
+aliases list. Duplicate entities will create broken architecture graphs with \
+duplicate nodes — this is a hard failure.
+
+7. Architecture roles classify WHAT the entity does. Every entity should have \
+an architecture_role when its function is clear: "service" for microservices \
+and backends, "datastore" for databases and stores, "queue" for message \
+brokers, "worker" for processing units, "scheduler" for cron/periodic jobs, \
+"api" for API gateways and endpoints, "client" for frontends and SDKs, \
+"batch_job" for offline processing, "stream_processor" for streaming pipelines, \
+"cache" for caching layers, "gateway" for ingress/egress points, \
+"orchestrator" for coordination services, "proxy" for reverse proxies, \
+"agent" for autonomous running processes. Set to null only when the role is \
+truly not discernible.
+
+8. Importance signals VISUAL hierarchy. Score each entity 1-10: 10 = the \
+central system everything connects to, 1 = a minor dependency mentioned once. \
+Consider: centrality in the architecture (how many other entities depend on \
+it?), mention frequency, role in flows (does data pass through it?), and \
+narrative weight (does the article spend paragraphs describing it?).
+
+9. Evidence enables UI traceability. For every entity, include a supporting \
+evidence excerpt — a verbatim sentence from the article that establishes its \
+existence and role. This powers citations, source highlighting, hover \
+explanations, and confidence visualization downstream.
+
+10. Stable IDs for graph rendering. Generate deterministic IDs for every \
+extracted object: entities get "ent_{snake_case_name}", concepts get \
+"con_{snake_case_term}", use your best slugification. IDs must be stable \
+across re-extractions — derive them from the content, never use random values.
+
+11. Confidence means recall completeness. Score 1.0 only if you are confident \
 you extracted every named entity, every load-bearing concept, every problem \
 signal, every scale signal, and every quote worth preserving. Score 0.7 if \
 you found most but suspect a few were missed. Score 0.4 if the article is \
@@ -102,7 +136,36 @@ appears. This is used downstream to anchor the entity in the article's narrative
 
   aliases: List any alternative names the article uses for this entity. For \
 example, if the article calls it both "Durable Objects" and "DO", include "DO" \
-as an alias. Do not invent abbreviations the article does not use.
+as an alias. Do not invent abbreviations the article does not use. CRITICAL: \
+If you find two entities that refer to the same thing (e.g. "Cassandra" and \
+"Apache Cassandra"), consolidate them — keep the more precise name as the \
+canonical one, add the other as an alias.
+
+  id: Generate a deterministic stable ID. Pattern: ent_{snake_case_name}. \
+Example: "Apache Cassandra" → "ent_apache_cassandra", "Durable Objects" → \
+"ent_durable_objects". Use lowercase, replace spaces/special chars with \
+underscores, remove leading/trailing underscores.
+
+  architecture_role: Classify what role this entity plays. Map: databases → \
+"datastore", message brokers → "queue", microservices → "service", API \
+gateways → "api", frontend apps → "client", batch processing → "batch_job", \
+stream processing → "stream_processor", caching layers → "cache", scheduling \
+systems → "scheduler", ingress points → "gateway", coordination systems → \
+"orchestrator", proxies/reverse proxies → "proxy", autonomous agents → \
+"agent", infrastructure (DNS, CDN, monitoring, deployment) → \
+"infrastructure_component". Set to null only for conceptual entities where \
+role is not applicable.
+
+  importance: Score 1-10 based on centrality. 8-10: the system is central to \
+the architecture, mentioned repeatedly, and data/control flows through it. \
+5-7: important but not central — a key dependency or significant component. \
+1-4: minor — mentioned once or twice, a dependency of a dependency. Default \
+to 5 if uncertain.
+
+  evidence: Provide a verbatim supporting excerpt from the article that \
+demonstrates this entity's existence and architectural role. Use the same \
+sentence as first_mention_context where possible, or a nearby sentence that \
+establishes what the entity does.
 
 ── concept_definitions ───────────────────────────
 Extract technical concepts a reader must understand to follow the article. \
@@ -126,6 +189,14 @@ deep specialisation.
 design patterns, and implementation details. Use "architectural_concern" for \
 cross-cutting properties the system was designed around (latency, consistency, \
 durability).
+
+  id: Generate a deterministic stable ID. Pattern: con_{snake_case_term}. \
+Example: "Eventual Consistency" → "con_eventual_consistency", "Shard \
+Rebalancing" → "con_shard_rebalancing".
+
+  evidence: Provide a verbatim supporting excerpt from the article that \
+demonstrates this concept in use — ideally the sentence where the article \
+defines or relies on the concept to make its argument.
 
 ── key_quotes ────────────────────────────────────
 Only include quotes where the EXACT wording carries meaning that would be \
@@ -165,16 +236,22 @@ EXTRACTION ORDER — follow this sequence
 ═══════════════════════════════════════════════════
 
 1. Read the full article. Build a mental inventory of every named entity.
-2. Extract named_entities — catalogue everything, then mark one as primary.
-3. Extract concept_definitions — screen for load-bearing concepts only.
-4. Identify core_problem — the specific pain that motivated the system.
-5. Extract problem_signals — concrete, specific evidence of that pain.
-6. Extract scale_context_signals — numbers, metrics, scale evidence.
-7. Extract key_quotes — verbatim sentences worth preserving.
-8. Synthesize article_summary — 2-3 sentence compressed argument.
-9. Validate: did you miss any entity? concepts? scale? Is the core_problem \
-specific or generic? Did you accidentally extract any relationships, flows, \
-or tradeoffs? Remove them if so.
+2. Extract named_entities — catalogue everything, then CANONICALIZE: merge \
+duplicates and consolidate aliases. Mark one as primary.
+3. Assign architecture_role and importance (1-10) to each entity.
+4. Extract evidence excerpts for each entity.
+5. Extract concept_definitions — screen for load-bearing concepts only. \
+Assign IDs and evidence.
+6. Identify core_problem — the specific pain that motivated the system.
+7. Extract problem_signals — concrete, specific evidence of that pain.
+8. Extract scale_context_signals — numbers, metrics, scale evidence.
+9. Extract key_quotes — verbatim sentences worth preserving.
+10. Synthesize article_summary — 2-3 sentence compressed argument.
+11. Validate: did you canonicalize all duplicate entities? Does every entity \
+have an architecture_role? Do importance scores reflect actual centrality? \
+Is evidence provided for each entity and concept? Did you miss any entity? \
+Did you accidentally extract any relationships, flows, or tradeoffs? Remove \
+them if so.
 """
 
 
