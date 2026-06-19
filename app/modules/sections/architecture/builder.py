@@ -38,12 +38,6 @@ class ArchitectureBuilder:
             article_id=article.article_id,
             title=(article.source_title or "")[:60],
         )
-        log.info(
-            "section_4:build_start | entities=%d | relationships=%d | layers=%d",
-            len(knowledge_model.named_entities),
-            len(knowledge_model.relationships),
-            len(knowledge_model.layer_signals),
-        )
 
         if len(knowledge_model.named_entities) < 2:
             raise ValueError("architecture requires at least 2 named entities")
@@ -67,13 +61,7 @@ class ArchitectureBuilder:
 
         key_quotes_text = self._format_arch_quotes(knowledge_model)
 
-        log.info(
-            "section_4:phase_1_complete | nodes=%d | layers=%d | rel_chars=%d",
-            len(nodes), len(layers), len(relationships_text),
-        )
-
         # ── Phase 2: LLM enrichment ────────────────────────────────────
-        log.info("section_4:phase_2_start | llm_enrichment")
         try:
             enrichment = self._llm.extract_structured(
                 system_prompt=ARCHITECTURE_SYSTEM_PROMPT,
@@ -90,7 +78,6 @@ class ArchitectureBuilder:
                 validation_retries=2,
                 model=settings.section_model,
             )
-            log.info("section_4:phase_2_complete | layers_enriched=%d", len(enrichment.layers))
         except Exception:
             enrichment = None
             log.opt.warning("section_4:phase_2_failed | falling_back_to_deterministic")
@@ -110,10 +97,6 @@ class ArchitectureBuilder:
             nodes=nodes,
             layers=layers,
             key_relationships=key_relationships,
-        )
-        log.info(
-            "section_4:build_complete | narrative_chars=%d | nodes=%d | layers=%d",
-            len(narrative), len(nodes), len(layers),
         )
         return result
 

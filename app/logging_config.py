@@ -95,9 +95,9 @@ def setup_logging(*, verbose: bool = False) -> None:
     root = logging.getLogger()
     root.setLevel(logging.DEBUG)
 
-    # ── stderr handler (colored, compact) ───────────────────────────
+    # ── stderr handler (colored, compact, warnings+ only) ───────────
     stderr_handler = logging.StreamHandler(sys.stderr)
-    stderr_handler.setLevel(logging.DEBUG)
+    stderr_handler.setLevel(logging.WARNING)
     stderr_fmt = (
         "\033[32m%(asctime)s.%(msecs)03d\033[0m | "
         "%(levelname)-8s | "

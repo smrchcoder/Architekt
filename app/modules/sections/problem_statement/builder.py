@@ -31,11 +31,6 @@ class ProblemStatementBuilder:
             article_id=article.article_id,
             title=(article.source_title or "")[:60],
         )
-        log.info(
-            "section_3:build_start | problem_signals=%d | core_problem=%s",
-            len(knowledge_model.problem_signals),
-            (knowledge_model.core_problem or "")[:60],
-        )
 
         if len(knowledge_model.problem_signals) < 1:
             raise ValueError("problem statement requires at least 1 problem signal")
@@ -47,13 +42,7 @@ class ProblemStatementBuilder:
         problem_signals_text = self._format_problem_signals(knowledge_model)
         key_quotes_text = self._format_problem_quotes(knowledge_model)
 
-        log.info(
-            "section_3:phase_1_complete | signal_chars=%d | quote_chars=%d",
-            len(problem_signals_text), len(key_quotes_text),
-        )
-
         # ── Phase 2: LLM enrichment ────────────────────────────────────
-        log.info("section_3:phase_2_start | llm_enrichment")
         try:
             enrichment = self._llm.extract_structured(
                 system_prompt=PROBLEM_STATEMENT_SYSTEM_PROMPT,
@@ -71,7 +60,6 @@ class ProblemStatementBuilder:
                 validation_retries=2,
                 model=settings.section_model,
             )
-            log.info("section_3:phase_2_complete | signals=%d", len(enrichment.signals))
         except Exception:
             enrichment = None
             log.opt.warning("section_3:phase_2_failed | falling_back_to_deterministic")
@@ -93,10 +81,6 @@ class ProblemStatementBuilder:
             signals=signals,
             core_problem=core_problem,
             why_it_hurt=why_it_hurt,
-        )
-        log.info(
-            "section_3:build_complete | narrative_chars=%d | signals=%d",
-            len(narrative), len(signals),
         )
         return result
 

@@ -159,10 +159,6 @@ class PassExtractor:
             )
 
             if combined >= threshold:
-                log.info(
-                    "pass_extraction_success | attempt=%d | self=%.2f | struct=%.2f | combined=%.2f",
-                    attempt + 1, self_reported, structural, combined,
-                )
                 return result
 
             if best_result is None or combined > best_result.combined_score:

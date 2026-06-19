@@ -33,23 +33,12 @@ class TradeoffsBuilder:
             article_id=article.article_id,
             title=(article.source_title or "")[:60],
         )
-        log.info(
-            "section_6:build_start | tradeoffs=%d | constraints=%d",
-            len(knowledge_model.tradeoff_signals),
-            len(knowledge_model.constraint_signals),
-        )
 
         # ── Phase 1: deterministic extraction ──────────────────────────
         tradeoffs_json = self._build_tradeoffs_json(knowledge_model)
         constraints_json = self._build_constraints_json(knowledge_model)
 
-        log.info(
-            "section_6:phase_1_complete | tradeoffs_bytes=%d | constraints_bytes=%d",
-            len(tradeoffs_json), len(constraints_json),
-        )
-
         # ── Phase 2: LLM enrichment ────────────────────────────────────
-        log.info("section_6:phase_2_start | llm_enrichment")
         try:
             enrichment = self._llm.extract_structured(
                 system_prompt=TRADEOFFS_SYSTEM_PROMPT,
@@ -63,10 +52,6 @@ class TradeoffsBuilder:
                 temperature=0.4,
                 validation_retries=2,
                 model=settings.section_model,
-            )
-            log.info(
-                "section_6:phase_2_complete | tradeoffs=%d | constraints=%d",
-                len(enrichment.tradeoffs), len(enrichment.constraints),
             )
         except Exception:
             enrichment = None
@@ -86,10 +71,6 @@ class TradeoffsBuilder:
             tradeoffs=tradeoffs,
             constraints=constraints,
             takeaways=takeaways,
-        )
-        log.info(
-            "section_6:build_complete | tradeoffs=%d | constraints=%d | takeaways_chars=%d",
-            len(tradeoffs), len(constraints), len(takeaways),
         )
         return result
 

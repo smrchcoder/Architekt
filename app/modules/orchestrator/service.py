@@ -109,10 +109,7 @@ class OrchestratorService:
             run = self._require_run(db, run_id)
             payload = PipelineRunCreate.model_validate(run.request_payload or {})
 
-            # ── Step 1: Ingestion ───────────────────────────────────────
-            log.info("step_start | step=%s | progress=%d%%", STEP_INGESTION, 5)
             self._mark_running(db, run_id, STEP_INGESTION, 5)
-
             article = self._with_retry(
                 func=self.ingestion_service.ingest_article,
                 step_name=STEP_INGESTION,
@@ -126,19 +123,7 @@ class OrchestratorService:
                 max_attempts=3,
                 run_id=run_id,
             )
-            log.info(
-                "step_complete | step=%s | article_id=%s | word_count=%d | title=%s",
-                STEP_INGESTION,
-                article.article_id,
-                article.word_count or 0,
-                (article.source_title or "")[:80],
-            )
 
-            # ── Step 2: Multi-Pass Knowledge Extraction ──────────────────
-            log.info(
-                "step_start | step=%s | progress=%d%% | article_id=%s",
-                STEP_MULTI_PASS_EXTRACTION, 15, article.article_id,
-            )
             self._update_run(
                 db, run_id,
                 current_step=STEP_MULTI_PASS_EXTRACTION, progress_percent=15,
@@ -153,15 +138,7 @@ class OrchestratorService:
                 max_attempts=2,
                 run_id=run_id,
             )
-            log.info(
-                "step_complete | step=%s | record_id=%s | raw_json_bytes=%d",
-                STEP_MULTI_PASS_EXTRACTION,
-                knowledge_record.article_id,
-                len(str(knowledge_record.raw_json)),
-            )
 
-            # ── Step 3: Merge & Cross-Pass Validation ───────────────────
-            log.info("step_start | step=%s | progress=%d%%", STEP_MERGE_VALIDATION, 25)
             self._update_run(
                 db, run_id,
                 current_step=STEP_MERGE_VALIDATION, progress_percent=25,
@@ -169,19 +146,6 @@ class OrchestratorService:
 
             knowledge_model = self.knowledge_validator.validate_raw(
                 knowledge_record.raw_json
-            )
-            log.info(
-                "step_complete | step=%s | confidence=%.2f | entities=%d | "
-                "concepts=%d | relationships=%d | flows=%d | "
-                "tradeoffs=%d | warnings=%d",
-                STEP_MERGE_VALIDATION,
-                knowledge_model.confidence_score,
-                len(knowledge_model.named_entities),
-                len(knowledge_model.concept_definitions),
-                len(knowledge_model.relationships),
-                len(knowledge_model.flow_sequences),
-                len(knowledge_model.tradeoff_signals),
-                len(knowledge_model.extraction_warnings),
             )
 
             run = self._require_run(db, run_id)
@@ -200,16 +164,7 @@ class OrchestratorService:
             for step_name, slot, progress, max_attempts in section_pipeline:
                 builder = self.section_builders.get(slot)
                 if builder is None:
-                    log.info(
-                        "step_skipped | step=%s | reason=no_builder_registered",
-                        step_name,
-                    )
                     continue
-
-                log.info(
-                    "step_start | step=%s | progress=%d%% | builder=%s",
-                    step_name, progress, type(builder).__name__,
-                )
                 self._update_run(db, run_id, step_name, progress)
                 self._run_section(
                     db=db,
@@ -227,10 +182,7 @@ class OrchestratorService:
 
         except Exception as exc:
             db.rollback()
-            log.opt.error(
-                "pipeline_failed | error=%s",
-                str(exc),
-            )
+            log.opt.error("pipeline_failed | error=%s", str(exc))
             self._fail_run(db, run_id, str(exc))
         finally:
             db.close()
@@ -269,7 +221,6 @@ class OrchestratorService:
         article,
         max_attempts: int = 2,
     ) -> None:
-        log = _log.bind(run_id=run_id)
         result = self._with_retry(
             func=builder.build,
             step_name=step_name,
@@ -279,11 +230,6 @@ class OrchestratorService:
             run_id=run_id,
         )
         self._save_section(db, run_id, section_slot, result)
-        log.info(
-            "step_complete | step=%s | section=%s | result_type=%s",
-            step_name, section_slot,
-            type(result).__name__ if result else "None",
-        )
 
     def _save_section(
         self, db: Session, run_id: str, slot: str, result
@@ -295,10 +241,6 @@ class OrchestratorService:
         data = result.model_dump(mode="json") if result is not None else None
         setattr(run, col, data)
         db.commit()
-        _log.bind(run_id=run_id).info(
-            "section_saved | slot=%s | bytes=%d",
-            slot, len(str(data)) if data else 0,
-        )
 
     def _with_retry(
         self,

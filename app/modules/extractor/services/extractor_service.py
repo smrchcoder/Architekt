@@ -156,7 +156,6 @@ class KnowledgeExtractor:
             article_id=article.article_id,
             title=(article.source_title or "")[:80],
         )
-        log.info("multi_pass_extraction_start | passes=3")
 
         cleaned_text = article.cleaned_text
         source_title = article.source_title
@@ -222,23 +221,11 @@ class KnowledgeExtractor:
         p2: ExtractionResult[StructureOutput] = results["structure"]
         p3: ExtractionResult[ReasoningOutput] = results["reasoning"]
 
-        log.info(
-            "multi_pass_extraction_complete"
-            " | recogn_self=%.2f struct=%.2f comb=%.2f retries=%d"
-            " | struct_self=%.2f struct=%.2f comb=%.2f retries=%d"
-            " | reason_self=%.2f struct=%.2f comb=%.2f retries=%d",
-            p1.self_reported_score, p1.structural_score, p1.combined_score, p1.retry_count,
-            p2.self_reported_score, p2.structural_score, p2.combined_score, p2.retry_count,
-            p3.self_reported_score, p3.structural_score, p3.combined_score, p3.retry_count,
-        )
-
         # ── Merge ───────────────────────────────────────────────────────
-        log.info("merge_start")
         cross_pass_warnings: list[str] = []
         knowledge_model = self.merge_service.merge(p1, p2, p3)
 
         # ── Cross-pass validation ───────────────────────────────────────
-        log.info("cross_pass_validation_start")
         cross_val = self.validator.validate_cross_pass(knowledge_model)
         if not cross_val.valid:
             log.warning(

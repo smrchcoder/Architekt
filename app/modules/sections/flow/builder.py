@@ -33,11 +33,6 @@ class FlowBuilder:
             article_id=article.article_id,
             title=(article.source_title or "")[:60],
         )
-        log.info(
-            "section_5:build_start | flows=%d | total_steps=%d",
-            len(knowledge_model.flow_sequences),
-            sum(len(s.steps) for s in knowledge_model.flow_sequences),
-        )
 
         if len(knowledge_model.flow_sequences) < 1:
             raise ValueError("flow section requires at least 1 flow sequence")
@@ -45,13 +40,7 @@ class FlowBuilder:
         # ── Phase 1: deterministic flow extraction ─────────────────────
         flows_json = self._build_flows_json(knowledge_model)
 
-        log.info(
-            "section_5:phase_1_complete | json_bytes=%d",
-            len(flows_json),
-        )
-
         # ── Phase 2: LLM enrichment ────────────────────────────────────
-        log.info("section_5:phase_2_start | llm_enrichment")
         try:
             enrichment = self._llm.extract_structured(
                 system_prompt=FLOW_SYSTEM_PROMPT,
@@ -65,7 +54,6 @@ class FlowBuilder:
                 validation_retries=2,
                 model=settings.section_model,
             )
-            log.info("section_5:phase_2_complete | flows_enriched=%d", len(enrichment.flows))
         except Exception:
             enrichment = None
             log.opt.warning("section_5:phase_2_failed | falling_back_to_deterministic")
@@ -77,7 +65,6 @@ class FlowBuilder:
             flows = self._build_deterministic_flows(knowledge_model)
 
         result = FlowSection(flows=flows)
-        log.info("section_5:build_complete | flows=%d", len(flows))
         return result
 
     # ── Phase 1 helpers ─────────────────────────────────────────────────
