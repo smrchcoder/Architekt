@@ -227,6 +227,7 @@ class KnowledgeExtractor:
 
         # ── Cross-pass validation ───────────────────────────────────────
         cross_val = self.validator.validate_cross_pass(knowledge_model)
+        retried_p2 = None
         if not cross_val.valid:
             log.warning(
                 "cross_pass_validation_failed | errors=%d | failing_pass=%s",
@@ -235,13 +236,13 @@ class KnowledgeExtractor:
             if cross_val.failing_pass == "structure":
                 log.info("retrying_pass_2_due_to_cross_reference_failure")
                 try:
-                    p2_retry = self.pass_extractor.extract_pass(
+                    retried_p2 = self.pass_extractor.extract_pass(
                         pass_name="structure",
                         system_prompt=system_prompts["structure"],
                         user_prompt=user_prompts["structure"],
                         model=models["structure"],
                     )
-                    knowledge_model = self.merge_service.merge(p1, p2_retry, p3)
+                    knowledge_model = self.merge_service.merge(p1, retried_p2, p3)
                     cross_val_2 = self.validator.validate_cross_pass(knowledge_model)
                     if not cross_val_2.valid:
                         cross_pass_warnings.extend(cross_val_2.errors)
@@ -261,8 +262,9 @@ class KnowledgeExtractor:
                 cross_pass_warnings.extend(cross_val.errors)
 
         if cross_pass_warnings:
+            effective_p2 = retried_p2 if retried_p2 is not None else p2
             knowledge_model = self.merge_service.merge(
-                p1, p2, p3, cross_pass_warnings=cross_pass_warnings,
+                p1, effective_p2, p3, cross_pass_warnings=cross_pass_warnings,
             )
 
         log.info(

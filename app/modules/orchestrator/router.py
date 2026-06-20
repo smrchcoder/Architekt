@@ -21,7 +21,6 @@ def health():
         status="completed",
         current_step="health",
         progress_percent=100,
-        knowledge_model=None,
     )
 
 

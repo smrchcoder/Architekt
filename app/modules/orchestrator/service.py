@@ -35,24 +35,45 @@ STEP_INGESTION = "ingestion"
 STEP_MULTI_PASS_EXTRACTION = "multi_pass_extraction"
 STEP_MERGE_VALIDATION = "merge_validation"
 
-STEP_SECTION_1_OVERVIEW = "section_1_overview"
-STEP_SECTION_2_KEY_CONCEPTS = "section_2_key_concepts"
-STEP_SECTION_3_PROBLEM = "section_3_problem_statement"
-STEP_SECTION_4_ARCHITECTURE = "section_4_architecture_overview"
-STEP_SECTION_5_FLOW = "section_5_end_to_end_flow"
-STEP_SECTION_6_TRADEOFFS = "section_6_tradeoffs_key_learnings"
+STEP_OVERVIEW = "overview"
+STEP_KEY_CONCEPTS = "key_concepts"
+STEP_PROBLEM = "problem_statement"
+STEP_ARCHITECTURE = "architecture"
+STEP_FLOW = "flow"
+STEP_TRADEOFFS = "tradeoffs"
 
 PIPELINE_STEPS = [
     STEP_INGESTION,
     STEP_MULTI_PASS_EXTRACTION,
     STEP_MERGE_VALIDATION,
-    STEP_SECTION_1_OVERVIEW,
-    STEP_SECTION_2_KEY_CONCEPTS,
-    STEP_SECTION_3_PROBLEM,
-    STEP_SECTION_4_ARCHITECTURE,
-    STEP_SECTION_5_FLOW,
-    STEP_SECTION_6_TRADEOFFS,
+    STEP_OVERVIEW,
+    STEP_KEY_CONCEPTS,
+    STEP_PROBLEM,
+    STEP_ARCHITECTURE,
+    STEP_FLOW,
+    STEP_TRADEOFFS,
 ]
+
+SECTION_SLOT_TO_COLUMN: dict[str, str] = {
+    "overview": "section_1_json",
+    "key_concepts": "section_2_json",
+    "problem_statement": "section_3_json",
+    "architecture": "section_4_json",
+    "flow": "section_5_json",
+    "tradeoffs": "section_6_json",
+}
+
+_STEP_PROGRESS: dict[str, int] = {
+    STEP_INGESTION: 5,
+    STEP_MULTI_PASS_EXTRACTION: 15,
+    STEP_MERGE_VALIDATION: 25,
+    STEP_OVERVIEW: 35,
+    STEP_KEY_CONCEPTS: 45,
+    STEP_PROBLEM: 53,
+    STEP_ARCHITECTURE: 61,
+    STEP_FLOW: 69,
+    STEP_TRADEOFFS: 77,
+}
 
 
 class OrchestratorService:
@@ -61,23 +82,23 @@ class OrchestratorService:
         ingestion_service: IngestionService | None = None,
         knowledge_extractor: KnowledgeExtractor | None = None,
         knowledge_validator: KnowledgeModelValidator | None = None,
-        section_1_builder: OverviewSectionBuilder | None = None,
-        section_2_builder: KeyConceptsBuilder | None = None,
-        section_3_builder: Any | None = None,
-        section_4_builder: Any | None = None,
-        section_5_builder: Any | None = None,
-        section_6_builder: Any | None = None,
+        overview_builder: OverviewSectionBuilder | None = None,
+        key_concepts_builder: KeyConceptsBuilder | None = None,
+        problem_builder: ProblemStatementBuilder | None = None,
+        architecture_builder: ArchitectureBuilder | None = None,
+        flow_builder: FlowBuilder | None = None,
+        tradeoffs_builder: TradeoffsBuilder | None = None,
     ) -> None:
         self.ingestion_service = ingestion_service or IngestionService()
         self.knowledge_extractor = knowledge_extractor or KnowledgeExtractor()
         self.knowledge_validator = knowledge_validator or KnowledgeModelValidator()
         self.section_builders = {
-            "section_1": section_1_builder or OverviewSectionBuilder(),
-            "section_2": section_2_builder or KeyConceptsBuilder(),
-            "section_3": section_3_builder or ProblemStatementBuilder(),
-            "section_4": section_4_builder or ArchitectureBuilder(),
-            "section_5": section_5_builder or FlowBuilder(),
-            "section_6": section_6_builder or TradeoffsBuilder(),
+            "overview": overview_builder or OverviewSectionBuilder(),
+            "key_concepts": key_concepts_builder or KeyConceptsBuilder(),
+            "problem_statement": problem_builder or ProblemStatementBuilder(),
+            "architecture": architecture_builder or ArchitectureBuilder(),
+            "flow": flow_builder or FlowBuilder(),
+            "tradeoffs": tradeoffs_builder or TradeoffsBuilder(),
         }
 
     def create_pipeline_run(
@@ -100,7 +121,7 @@ class OrchestratorService:
         return run
 
     def run_pipeline(self, run_id: str) -> None:
-        """Execute the full pipeline: ingestion → extraction → validation → sections 1-6."""
+        """Execute the full pipeline: ingestion → extraction → validation → sections."""
         log = _log.bind(run_id=run_id)
         log.info("pipeline_started | steps_total=%d", len(PIPELINE_STEPS))
 
@@ -151,14 +172,14 @@ class OrchestratorService:
             run = self._require_run(db, run_id)
             db.commit()
 
-            # ── Steps 4-9: Section Builders ─────────────────────────────
+            # ── Section Builders ──────────────────────────────────────────
             section_pipeline = [
-                (STEP_SECTION_1_OVERVIEW, "section_1", 35, 2),
-                (STEP_SECTION_2_KEY_CONCEPTS, "section_2", 45, 2),
-                (STEP_SECTION_3_PROBLEM, "section_3", 53, 2),
-                (STEP_SECTION_4_ARCHITECTURE, "section_4", 61, 2),
-                (STEP_SECTION_5_FLOW, "section_5", 69, 2),
-                (STEP_SECTION_6_TRADEOFFS, "section_6", 77, 2),
+                (STEP_OVERVIEW, "overview", 35, 2),
+                (STEP_KEY_CONCEPTS, "key_concepts", 45, 2),
+                (STEP_PROBLEM, "problem_statement", 53, 2),
+                (STEP_ARCHITECTURE, "architecture", 61, 2),
+                (STEP_FLOW, "flow", 69, 2),
+                (STEP_TRADEOFFS, "tradeoffs", 77, 2),
             ]
 
             for step_name, slot, progress, max_attempts in section_pipeline:
@@ -197,12 +218,12 @@ class OrchestratorService:
             current_step=run.current_step,
             progress_percent=run.progress_percent,
             article_id=run.article_id,
-            section_1=run.section_1_json,
-            section_2=run.section_2_json,
-            section_3=run.section_3_json,
-            section_4=run.section_4_json,
-            section_5=run.section_5_json,
-            section_6=run.section_6_json,
+            overview=run.section_1_json,
+            key_concepts=run.section_2_json,
+            problem_statement=run.section_3_json,
+            architecture=run.section_4_json,
+            flow=run.section_5_json,
+            tradeoffs=run.section_6_json,
             error_message=run.error_message,
             created_at=run.created_at,
             updated_at=run.updated_at,
@@ -235,9 +256,11 @@ class OrchestratorService:
         self, db: Session, run_id: str, slot: str, result
     ) -> None:
         run = self._require_run(db, run_id)
-        col = f"{slot}_json"
-        if not hasattr(run, col):
+        col = SECTION_SLOT_TO_COLUMN.get(slot)
+        if col is None:
             raise ValueError(f"Unknown section slot: {slot}")
+        if not hasattr(run, col):
+            raise ValueError(f"Unknown section column: {col}")
         data = result.model_dump(mode="json") if result is not None else None
         setattr(run, col, data)
         db.commit()
@@ -283,18 +306,8 @@ class OrchestratorService:
 
     @staticmethod
     def _progress_for(step_name: str, attempt: int, _max_attempts: int) -> int:
-        base = {
-            STEP_INGESTION: 5,
-            STEP_MULTI_PASS_EXTRACTION: 15,
-            STEP_MERGE_VALIDATION: 25,
-            STEP_SECTION_1_OVERVIEW: 35,
-            STEP_SECTION_2_KEY_CONCEPTS: 45,
-            STEP_SECTION_3_PROBLEM: 53,
-            STEP_SECTION_4_ARCHITECTURE: 61,
-            STEP_SECTION_5_FLOW: 69,
-            STEP_SECTION_6_TRADEOFFS: 77,
-        }
-        return base.get(step_name, 50) + (attempt * 2)
+        base = _STEP_PROGRESS.get(step_name, 50)
+        return base + (attempt * 2)
 
     def _mark_running(
         self, db: Session, run_id: str, current_step: str, progress_percent: int

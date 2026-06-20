@@ -6,6 +6,11 @@ from app.core.config import settings
 from app.llm import LLMClient
 from app.logging_config import get_logger
 from app.modules.extractor.models.knowledge_model import KnowledgeModel, SectionRelevance
+from app.modules.sections._shared.entity_resolver import (
+    build_name_to_slug_map,
+    resolve_entity_refs_in_text,
+)
+from app.modules.sections._shared.enums import Severity
 from app.modules.sections.problem_statement.prompts import (
     PROBLEM_STATEMENT_SYSTEM_PROMPT,
     build_problem_statement_user_prompt,
@@ -62,7 +67,7 @@ class ProblemStatementBuilder:
             )
         except Exception:
             enrichment = None
-            log.opt.warning("section_3:phase_2_failed | falling_back_to_deterministic")
+            log.opt.warning("problem_statement:phase_2_failed | falling_back_to_deterministic")
 
         # ── Phase 3: assemble ──────────────────────────────────────────
         if enrichment:
@@ -75,6 +80,9 @@ class ProblemStatementBuilder:
             signals = self._build_deterministic_signals(knowledge_model)
 
         why_it_hurt = self._build_why_it_hurt(knowledge_model, scale_context)
+
+        # Resolve affected entity IDs for cross-section linking
+        signals = self._resolve_entity_refs(signals, knowledge_model)
 
         result = ProblemStatementSection(
             problem_narrative=narrative,
@@ -141,7 +149,7 @@ class ProblemStatementBuilder:
     ) -> list[ProblemSignal]:
         signals: list[ProblemSignal] = []
         for i, raw_signal in enumerate(knowledge_model.problem_signals[:6]):
-            severity = "critical" if i == 0 else "major" if i < 3 else "minor"
+            severity = Severity.CRITICAL if i == 0 else Severity.MAJOR if i < 3 else Severity.MINOR
             scale_dim = self._infer_scale_dimension(raw_signal)
             signals.append(
                 ProblemSignal(
@@ -150,6 +158,22 @@ class ProblemStatementBuilder:
                     scale_dimension=scale_dim,
                     evidence=raw_signal,
                 )
+            )
+        return signals
+
+    @staticmethod
+    def _resolve_entity_refs(
+        signals: list[ProblemSignal], knowledge_model: KnowledgeModel
+    ) -> list[ProblemSignal]:
+        """Resolve architecture node IDs for each problem signal.
+
+        Finds entity names mentioned in each signal's description and maps
+        them to architecture node slugs for cross-section visual linking.
+        """
+        name_to_slug = build_name_to_slug_map(knowledge_model)
+        for signal in signals:
+            signal.affected_entity_ids = resolve_entity_refs_in_text(
+                signal.description, name_to_slug
             )
         return signals
 

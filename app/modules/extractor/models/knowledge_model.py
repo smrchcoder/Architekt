@@ -415,5 +415,5 @@ class KnowledgeModel(BaseModel):
     )
     extraction_warnings: list[str] = Field(
         default_factory=list,
-        description="Any issues encountered during extraction: missing sections, ambiguous entity names, flows that could not be ordered, tradeoffs with no clear cost or benefit. Used by section generators to decide when to fall back to article snippets.",
+        description="Any issues encountered during extraction: missing sections, ambiguous entity names, flows that could not be ordered, tradeoffs with no clear cost or benefit. Metadata for diagnostics — not currently consumed by section builders.",
     )

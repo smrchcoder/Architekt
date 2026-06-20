@@ -6,7 +6,11 @@ from typing import Any
 from app.core.config import settings
 from app.llm import LLMClient
 from app.logging_config import get_logger
-from app.modules.extractor.models.knowledge_model import KnowledgeModel
+from app.modules.extractor.models.knowledge_model import KnowledgeModel, SectionRelevance
+from app.modules.sections._shared.entity_resolver import (
+    build_name_to_slug_map,
+    resolve_entity_refs_in_text,
+)
 from app.modules.sections.tradeoffs.prompts import (
     TRADEOFFS_SYSTEM_PROMPT,
     build_tradeoffs_user_prompt,
@@ -55,7 +59,7 @@ class TradeoffsBuilder:
             )
         except Exception:
             enrichment = None
-            log.opt.warning("section_6:phase_2_failed | falling_back_to_deterministic")
+            log.opt.warning("tradeoffs:phase_2_failed | falling_back_to_deterministic")
 
         # ── Phase 3: assemble ──────────────────────────────────────────
         if enrichment:
@@ -66,6 +70,9 @@ class TradeoffsBuilder:
             tradeoffs = self._build_deterministic_tradeoffs(knowledge_model)
             constraints = self._build_deterministic_constraints(knowledge_model)
             takeaways = self._build_deterministic_takeaways(knowledge_model)
+
+        # Enrich tradeoffs with evidence and entity links from the KM
+        tradeoffs = self._enrich_tradeoffs(tradeoffs, knowledge_model)
 
         result = TradeoffsSection(
             tradeoffs=tradeoffs,
@@ -109,6 +116,7 @@ class TradeoffsBuilder:
                 condition=t.condition,
                 category=None,
                 insight=None,
+                evidence=t.evidence,
             )
             for t in knowledge_model.tradeoff_signals
         ]
@@ -142,3 +150,63 @@ class TradeoffsBuilder:
                 "between performance, cost, complexity, and reliability."
             )
         return " ".join(parts)
+
+    @staticmethod
+    def _enrich_tradeoffs(
+        tradeoffs: list[TradeoffEntry], knowledge_model: KnowledgeModel
+    ) -> list[TradeoffEntry]:
+        """Populate evidence, affected_entities, and affected_entity_ids.
+
+        Evidence is copied from the KM's tradeoff_signals for deterministic
+        entries, or backfilled from SectionRelevance.TRADEOFFS quotes (previously
+        unused). Affected entities are resolved by finding entity names mentioned
+        in each tradeoff's description, benefit, and cost text. affected_entity_ids
+        stores the architecture node slugs for deterministic cross-section linking.
+        """
+        # Build a map from KM tradeoff description → evidence for deterministic fallback
+        km_evidence_map: dict[str, str] = {}
+        for t in knowledge_model.tradeoff_signals:
+            if t.evidence:
+                km_evidence_map[t.description] = t.evidence
+
+        # Collect TRADEOFFS-relevant quotes (previously unused) for evidence backfill
+        tradeoff_quotes = [
+            q.text
+            for q in knowledge_model.key_quotes
+            if SectionRelevance.TRADEOFFS in q.section_relevance
+        ]
+
+        # Build name → slug map using the shared utility (same collision handling
+        # as ArchitectureBuilder, so slugs match architecture node IDs exactly)
+        name_to_slug = build_name_to_slug_map(knowledge_model)
+
+        for tradeoff in tradeoffs:
+            # Fill evidence from KM if not already set by enrichment
+            if not tradeoff.evidence:
+                tradeoff.evidence = km_evidence_map.get(tradeoff.description)
+
+            # Backfill evidence from TRADEOFFS-relevant quotes if still missing
+            if not tradeoff.evidence and tradeoff_quotes:
+                search_text = f"{tradeoff.description} {tradeoff.benefit} {tradeoff.cost}".lower()
+                for quote in tradeoff_quotes:
+                    if any(word in quote.lower() for word in search_text.split()[:3]):
+                        tradeoff.evidence = quote
+                        break
+
+            # Find affected entities by substring matching in tradeoff text
+            search_text = f"{tradeoff.description} {tradeoff.benefit} {tradeoff.cost}"
+            affected_ids = resolve_entity_refs_in_text(search_text, name_to_slug)
+
+            # Map slugs back to entity names for affected_entities
+            slug_to_name: dict[str, str] = {}
+            for entity in knowledge_model.named_entities:
+                slug = name_to_slug.get(entity.name)
+                if slug:
+                    slug_to_name[slug] = entity.name
+
+            tradeoff.affected_entity_ids = affected_ids
+            tradeoff.affected_entities = [
+                slug_to_name[s] for s in affected_ids if s in slug_to_name
+            ]
+
+        return tradeoffs

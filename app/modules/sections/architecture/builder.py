@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-import re
+from collections import Counter
 from typing import Any
 
 from app.core.config import settings
@@ -9,14 +9,20 @@ from app.llm import LLMClient
 from app.logging_config import get_logger
 from app.modules.extractor.models.knowledge_model import (
     EntityType,
+    InteractionType,
     KnowledgeModel,
     SectionRelevance,
+)
+from app.modules.sections._shared.entity_resolver import (
+    build_name_to_slug_map,
+    slugify,
 )
 from app.modules.sections.architecture.prompts import (
     ARCHITECTURE_SYSTEM_PROMPT,
     build_architecture_user_prompt,
 )
 from app.modules.sections.architecture.schemas import (
+    ArchitectureEdge,
     ArchitectureEnrichment,
     ArchitectureLayer,
     ArchitectureNode,
@@ -44,12 +50,23 @@ class ArchitectureBuilder:
         if len(knowledge_model.relationships) < 1:
             raise ValueError("architecture requires at least 1 relationship")
 
+        # Collect layer names so backfilled entities that are architectural
+        # tiers (e.g. "Network Layer") are not rendered as nodes.
+        layer_names: set[str] = {l.layer_name for l in knowledge_model.layer_signals}
+
         # ── Phase 1: deterministic node/layer extraction ────────────────
-        nodes = self._build_nodes(knowledge_model)
+        nodes, name_to_slug = self._build_nodes(knowledge_model, layer_names)
+        edges = self._build_edges(knowledge_model, name_to_slug, layer_names)
         layers = self._build_layers(knowledge_model, nodes)
-        relationships_text = self._format_relationships(knowledge_model)
+        relationships_text = self._format_relationships(knowledge_model, layer_names)
         entities_json = json.dumps([
-            {"name": n.name, "type": n.entity_type, "description": n.description}
+            {
+                "name": n.name,
+                "type": n.entity_type,
+                "role": n.architecture_role,
+                "importance": n.importance,
+                "description": n.description,
+            }
             for n in nodes
         ], indent=2, ensure_ascii=False)
         layers_json = json.dumps([
@@ -80,7 +97,7 @@ class ArchitectureBuilder:
             )
         except Exception:
             enrichment = None
-            log.opt.warning("section_4:phase_2_failed | falling_back_to_deterministic")
+            log.opt.warning("architecture:phase_2_failed | falling_back_to_deterministic")
 
         # ── Phase 3: assemble ──────────────────────────────────────────
         if enrichment:
@@ -89,12 +106,14 @@ class ArchitectureBuilder:
         else:
             narrative = self._build_deterministic_narrative(knowledge_model, nodes, layers)
 
-        primary = next((n for n in nodes if n.is_primary), nodes[0] if nodes else None)
-        key_relationships = self._top_relationships(knowledge_model)
+        # Ensure the primary entity is an internal system, not the company
+        nodes = self._correct_primary_entity(nodes)
+        key_relationships = self._top_relationships(knowledge_model, layer_names)
 
         result = ArchitectureSection(
             overview_narrative=narrative,
             nodes=nodes,
+            edges=edges,
             layers=layers,
             key_relationships=key_relationships,
         )
@@ -102,36 +121,142 @@ class ArchitectureBuilder:
 
     # ── Phase 1 helpers ─────────────────────────────────────────────────
 
-    def _build_nodes(self, knowledge_model: KnowledgeModel) -> list[ArchitectureNode]:
+    def _build_nodes(
+        self, knowledge_model: KnowledgeModel, layer_names: set[str]
+    ) -> tuple[list[ArchitectureNode], dict[str, str]]:
+        # Use the shared slug utility — same collision handling as all other builders
+        name_to_slug = build_name_to_slug_map(
+            knowledge_model, skip_layer_names=True, layer_names=layer_names
+        )
+
         nodes: list[ArchitectureNode] = []
-        node_ids: set[str] = set()
         for entity in knowledge_model.named_entities:
-            slug = self._slugify(entity.name)
-            if slug in node_ids:
-                slug = f"{slug}-{len(node_ids)}"
-            node_ids.add(slug)
+            if entity.name in layer_names:
+                continue
+
+            slug = name_to_slug.get(entity.name)
+            if slug is None:
+                continue
+
             layer = self._find_layer(entity.name, knowledge_model)
             nodes.append(
                 ArchitectureNode(
                     id=slug,
                     name=entity.name,
-                    entity_type=entity.entity_type.value,
+                    entity_type=entity.entity_type,
                     description=entity.description,
                     layer=layer,
                     is_primary=entity.is_primary,
                     connected_to=[],
+                    architecture_role=entity.architecture_role,
+                    importance=entity.importance,
+                    evidence=entity.evidence,
                 )
             )
 
-        name_to_id = {n.name: n.id for n in nodes}
+        # Populate connected_to from relationships
         for rel in knowledge_model.relationships:
-            src_id = name_to_id.get(rel.source)
-            tgt_id = name_to_id.get(rel.target)
+            if rel.source in layer_names or rel.target in layer_names:
+                continue
+            src_id = name_to_slug.get(rel.source)
+            tgt_id = name_to_slug.get(rel.target)
             if src_id and tgt_id:
                 for node in nodes:
                     if node.id == src_id and tgt_id not in node.connected_to:
                         node.connected_to.append(tgt_id)
 
+        # Populate parent_id from CONTAINS relationships (containment hierarchy)
+        for rel in knowledge_model.relationships:
+            if rel.interaction_type != InteractionType.CONTAINS:
+                continue
+            parent_slug = name_to_slug.get(rel.source)
+            child_slug = name_to_slug.get(rel.target)
+            if parent_slug and child_slug:
+                for node in nodes:
+                    if node.id == child_slug:
+                        node.parent_id = parent_slug
+
+        # Infer layers for unassigned entities based on connected neighbors
+        nodes = self._infer_layers_for_unassigned(nodes, knowledge_model)
+
+        # Default any remaining null-layer entities to "Infrastructure"
+        for node in nodes:
+            if node.layer is None:
+                node.layer = "Infrastructure"
+
+        return nodes, name_to_slug
+
+    @staticmethod
+    def _build_edges(
+        knowledge_model: KnowledgeModel,
+        name_to_slug: dict[str, str],
+        layer_names: set[str],
+    ) -> list[ArchitectureEdge]:
+        """Build graph-ready ArchitectureEdge objects from KM relationships."""
+        edges: list[ArchitectureEdge] = []
+        seen: set[str] = set()
+        for rel in knowledge_model.relationships:
+            if rel.source in layer_names or rel.target in layer_names:
+                continue
+            src_slug = name_to_slug.get(rel.source)
+            tgt_slug = name_to_slug.get(rel.target)
+            if not src_slug or not tgt_slug:
+                continue
+            edge_id = f"rel_{src_slug}_{tgt_slug}"
+            if edge_id in seen:
+                continue
+            seen.add(edge_id)
+            edges.append(
+                ArchitectureEdge(
+                    id=edge_id,
+                    source_id=src_slug,
+                    target_id=tgt_slug,
+                    interaction_type=rel.interaction_type,
+                    label=rel.label,
+                    is_bidirectional=rel.is_bidirectional,
+                )
+            )
+        return edges
+
+    @staticmethod
+    def _infer_layers_for_unassigned(
+        nodes: list[ArchitectureNode],
+        knowledge_model: KnowledgeModel,
+    ) -> list[ArchitectureNode]:
+        """Assign layers to entities that have no explicit layer assignment.
+
+        If an entity connects to entities in a known layer (via relationships),
+        it inherits that layer. This prevents most entities from appearing
+        as unlayered orphans in the diagram.
+        """
+        # Build name → layer from KM layer_signals
+        known_layer: dict[str, str] = {}
+        for layer in knowledge_model.layer_signals:
+            for entity_name in layer.entities_in_layer:
+                known_layer[entity_name] = layer.layer_name
+
+        # Build name → node lookup
+        name_map: dict[str, ArchitectureNode] = {n.name: n for n in nodes}
+
+        # For unassigned nodes, check their connected_to neighbors
+        for node in nodes:
+            if node.layer is not None:
+                continue  # Already assigned
+            # Find neighbor layers via connected_to
+            neighbor_layers: list[str] = []
+            for connected_id in node.connected_to:
+                neighbor = next(
+                    (n for n in nodes if n.id == connected_id),
+                    None,
+                )
+                if neighbor and neighbor.layer:
+                    neighbor_layers.append(neighbor.layer)
+            if neighbor_layers:
+                # Assign the most common layer among neighbors
+                from collections import Counter
+                most_common = Counter(neighbor_layers).most_common(1)
+                if most_common:
+                    node.layer = most_common[0][0]
         return nodes
 
     @staticmethod
@@ -159,21 +284,44 @@ class ArchitectureBuilder:
                     description=None,
                 )
             )
-        if not layers and len(nodes) >= 4:
-            default_nodes = [n.name for n in nodes[:4]]
-            layers.append(
-                ArchitectureLayer(
-                    name="System layer",
-                    order=0,
-                    description=None,
-                )
-            )
         return layers
 
     @staticmethod
-    def _format_relationships(knowledge_model: KnowledgeModel) -> str:
+    def _correct_primary_entity(nodes: list[ArchitectureNode]) -> list[ArchitectureNode]:
+        """Ensure the primary entity is an internal system, not the company.
+
+        The LLM often marks the company (e.g. "Netflix") as primary because
+        it's central to the article's context. But for diagram purposes the
+        primary entity should be the actual system (internal_system type).
+        """
+        # If current primary is not internal_system, find one to promote
+        current_primary = next((n for n in nodes if n.is_primary), None)
+        if current_primary and current_primary.entity_type != EntityType.INTERNAL_SYSTEM:
+            internal_system = next(
+                (n for n in nodes if n.entity_type == EntityType.INTERNAL_SYSTEM),
+                None,
+            )
+            if internal_system:
+                current_primary.is_primary = False
+                internal_system.is_primary = True
+        # If no primary at all, pick the first internal_system
+        if not any(n.is_primary for n in nodes):
+            internal_system = next(
+                (n for n in nodes if n.entity_type == EntityType.INTERNAL_SYSTEM),
+                None,
+            )
+            if internal_system:
+                internal_system.is_primary = True
+            elif nodes:
+                nodes[0].is_primary = True
+        return nodes
+
+    @staticmethod
+    def _format_relationships(knowledge_model: KnowledgeModel, layer_names: set[str]) -> str:
         lines: list[str] = []
         for rel in knowledge_model.relationships:
+            if rel.source in layer_names or rel.target in layer_names:
+                continue
             direction = "↔" if rel.is_bidirectional else "→"
             lines.append(f"{rel.source} {direction} {rel.target}: {rel.label}")
         return "\n".join(lines)
@@ -243,15 +391,11 @@ class ArchitectureBuilder:
         return " ".join(parts)
 
     @staticmethod
-    def _top_relationships(knowledge_model: KnowledgeModel) -> list[str]:
+    def _top_relationships(knowledge_model: KnowledgeModel, layer_names: set[str]) -> list[str]:
         rels: list[str] = []
         for rel in knowledge_model.relationships[:10]:
+            if rel.source in layer_names or rel.target in layer_names:
+                continue
             direction = "↔" if rel.is_bidirectional else "→"
             rels.append(f"{rel.source} {direction} {rel.target}: {rel.label}")
         return rels
-
-    @staticmethod
-    def _slugify(text: str) -> str:
-        slug = text.lower().strip()
-        slug = re.sub(r"[^a-z0-9]+", "-", slug)
-        return slug.strip("-")

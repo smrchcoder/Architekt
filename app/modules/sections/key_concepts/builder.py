@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import re
 from collections import Counter
 from typing import Any
 
@@ -15,6 +14,7 @@ from app.modules.extractor.models.knowledge_model import (
     KnowledgeModel,
     NamedEntity,
 )
+from app.modules.sections._shared.entity_resolver import slugify
 from app.modules.sections.key_concepts.prompts import (
     KEY_CONCEPTS_SYSTEM_PROMPT,
     build_key_concepts_user_prompt,
@@ -107,15 +107,15 @@ class KeyConceptsBuilder:
         except Exception:
             enriched_map = {}
             log.opt.warning(
-                "section_2:phase_2_failed | falling_back_to_deterministic | selected=%d",
+                "key_concepts:phase_2_failed | falling_back_to_deterministic | selected=%d",
                 len(selected),
             )
 
         # ── Phase 3: assemble final entries ─────────────────────────────
         entries: list[ConceptEntry] = []
         slug_counts: dict[str, int] = {}
-        for _, concept in selected:
-            slug = self._slugify(concept.term)
+        for rank_idx, (_, concept) in enumerate(selected, 1):
+            slug = slugify(concept.term)
             slug_counts[slug] = slug_counts.get(slug, 0) + 1
             if slug_counts[slug] > 1:
                 slug = f"{slug}-{slug_counts[slug]}"
@@ -140,7 +140,9 @@ class KeyConceptsBuilder:
                     why_it_matters=why_it_matters,
                     category=concept.category_hint,
                     difficulty=concept.difficulty_hint,
+                    rank=rank_idx,
                     architecture_node_refs=arch_refs,
+                    evidence=concept.evidence,
                 )
             )
 
@@ -182,7 +184,7 @@ class KeyConceptsBuilder:
     ) -> str:
         payload: list[dict[str, Any]] = []
         for _, concept in scored:
-            slug = self._slugify(concept.term)
+            slug = slugify(concept.term)
             entity = entity_map.get(concept.term.lower())
             relevant_rels = [
                 f"{rel.source} → {rel.target}: {rel.label}"
@@ -342,14 +344,8 @@ class KeyConceptsBuilder:
                 if entity.name.lower() == term_lower or any(
                     alias.lower() == term_lower for alias in entity.aliases
                 ):
-                    refs.append(self._slugify(entity.name))
+                    refs.append(slugify(entity.name))
         return refs
-
-    @staticmethod
-    def _slugify(text: str) -> str:
-        slug = text.lower().strip()
-        slug = re.sub(r"[^a-z0-9]+", "-", slug)
-        return slug.strip("-")
 
     @staticmethod
     def _sentence(text: str) -> str:

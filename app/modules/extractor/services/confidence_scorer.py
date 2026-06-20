@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
+from app.modules.extractor.models.knowledge_model import EntityType
+
 
 class ConfidenceScorer:
     """Computes deterministic structural quality scores for per-pass outputs.
@@ -10,7 +12,8 @@ class ConfidenceScorer:
     what matters most for that pass:
 
     - **Pass 1 (Recognition)**: entity density, concept completeness, field
-      population, problem signals, scale signals, key quotes.
+      population, problem signals, scale signals, key quotes,
+      entity_completeness (importance variance + role coverage).
     - **Pass 2 (Structure)**: field population, relationship count, flow
       step density, flow sequence count, layer count, temporal count.
     - **Pass 3 (Reasoning)**: tradeoff completeness (benefit+cost presence),
@@ -29,12 +32,13 @@ class ConfidenceScorer:
         strongest signals of a poor recognition pass.
         """
         weights = {
-            "entity_density": 0.25,
-            "concept_completeness": 0.20,
+            "entity_density": 0.20,
+            "concept_completeness": 0.15,
             "field_population": 0.20,
-            "problem_signals": 0.15,
+            "problem_signals": 0.10,
             "scale_signals": 0.10,
-            "key_quotes": 0.10,
+            "key_quotes": 0.05,
+            "entity_completeness": 0.20,
         }
 
         signals = [
@@ -44,6 +48,7 @@ class ConfidenceScorer:
             (weights["problem_signals"], ConfidenceScorer._count_score(data, "problem_signals", 1)),
             (weights["scale_signals"], ConfidenceScorer._count_score(data, "scale_context_signals", 1)),
             (weights["key_quotes"], ConfidenceScorer._count_score(data, "key_quotes", 1)),
+            (weights["entity_completeness"], ConfidenceScorer._entity_completeness(data)),
         ]
 
         return sum(weight * score for weight, score in signals)
@@ -107,6 +112,30 @@ class ConfidenceScorer:
         """Score entity count against a baseline of 15 (saturates at 1.0)."""
         entities = getattr(data, "named_entities", [])
         return min(1.0, len(entities) / 15.0)
+
+    @staticmethod
+    def _entity_completeness(data: BaseModel) -> float:
+        """Score entity quality: importance assignment + architecture_role coverage.
+
+        Checks that entities have meaningful importance (not all default 5s)
+        and that architecture roles are assigned where possible. A low score
+        indicates the LLM failed to enrich entities beyond the name.
+        """
+        entities = getattr(data, "named_entities", [])
+        if not entities:
+            return 0.0
+
+        # Importance variance: score 1.0 if importance values vary (not all default 5)
+        importance_values = {getattr(e, "importance", 5) for e in entities}
+        importance_has_variance = len(importance_values) > 1
+        importance_score = 1.0 if importance_has_variance else 0.3
+
+        # Role coverage: fraction of non-conceptual entities with an assigned role
+        non_concept = [e for e in entities if getattr(e, "entity_type", None) != EntityType.CONCEPT]
+        roles_assigned = sum(1 for e in non_concept if getattr(e, "architecture_role", None) is not None)
+        role_coverage = roles_assigned / max(len(non_concept), 1)
+
+        return 0.5 * importance_score + 0.5 * role_coverage
 
     @staticmethod
     def _concept_completeness(data: BaseModel) -> float:

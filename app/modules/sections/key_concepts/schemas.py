@@ -14,9 +14,17 @@ class ConceptEntry(BaseModel):
     )
     category: CategoryHint
     difficulty: DifficultyHint
+    rank: int = Field(
+        ..., ge=1,
+        description="Ranking position (1 = most important). Determined by concept kind weight, usage count, and relationship/flow participation.",
+    )
     architecture_node_refs: list[str] = Field(
         default_factory=list,
-        description="Architecture node IDs that reference this concept (Section 4 cross-ref)",
+        description="Architecture node IDs that reference this concept (cross-ref to architecture section)",
+    )
+    evidence: str | None = Field(
+        default=None,
+        description="Verbatim or near-verbatim excerpt from the article demonstrating this concept in use. Used for citations and hover explanations in the UI.",
     )
 
 

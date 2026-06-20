@@ -33,12 +33,12 @@ def get_converted_articles(db: Session = Depends(get_db)):
             status=run.status,
             updated_at=run.updated_at,
             sections={
-                "section_1": run.section_1_json,
-                "section_2": run.section_2_json,
-                "section_3": run.section_3_json,
-                "section_4": run.section_4_json,
-                "section_5": run.section_5_json,
-                "section_6": run.section_6_json,
+                "overview": run.section_1_json,
+                "key_concepts": run.section_2_json,
+                "problem_statement": run.section_3_json,
+                "architecture": run.section_4_json,
+                "flow": run.section_5_json,
+                "tradeoffs": run.section_6_json,
             },
         )
         for article, run in rows
