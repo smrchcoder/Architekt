@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import json
-from collections import Counter
-from typing import Any
 
 from app.core.config import settings
 from app.llm import LLMClient
@@ -15,7 +13,6 @@ from app.modules.extractor.models.knowledge_model import (
 )
 from app.modules.sections._shared.entity_resolver import (
     build_name_to_slug_map,
-    slugify,
 )
 from app.modules.sections.architecture.prompts import (
     ARCHITECTURE_SYSTEM_PROMPT,
@@ -52,7 +49,9 @@ class ArchitectureBuilder:
 
         # Collect layer names so backfilled entities that are architectural
         # tiers (e.g. "Network Layer") are not rendered as nodes.
-        layer_names: set[str] = {l.layer_name for l in knowledge_model.layer_signals}
+        layer_names: set[str] = {
+            layer_signal.layer_name for layer_signal in knowledge_model.layer_signals
+        }
 
         # ── Phase 1: deterministic node/layer extraction ────────────────
         nodes, name_to_slug = self._build_nodes(knowledge_model, layer_names)
@@ -70,10 +69,10 @@ class ArchitectureBuilder:
             for n in nodes
         ], indent=2, ensure_ascii=False)
         layers_json = json.dumps([
-            {"name": l.name, "order": l.order, "nodes": [
-                n.name for n in nodes if n.layer == l.name
+            {"name": layer.name, "order": layer.order, "nodes": [
+                n.name for n in nodes if n.layer == layer.name
             ]}
-            for l in layers
+            for layer in layers
         ], indent=2, ensure_ascii=False) if layers else ""
 
         key_quotes_text = self._format_arch_quotes(knowledge_model)
@@ -236,8 +235,6 @@ class ArchitectureBuilder:
                 known_layer[entity_name] = layer.layer_name
 
         # Build name → node lookup
-        name_map: dict[str, ArchitectureNode] = {n.name: n for n in nodes}
-
         # For unassigned nodes, check their connected_to neighbors
         for node in nodes:
             if node.layer is not None:
@@ -366,7 +363,10 @@ class ArchitectureBuilder:
             )
 
         if layers:
-            layer_names = [l.name for l in sorted(layers, key=lambda l: l.order)]
+            layer_names = [
+                layer.name
+                for layer in sorted(layers, key=lambda layer: layer.order)
+            ]
             parts.append(
                 f"The architecture is organized into {len(layers)} layers: "
                 f"{', '.join(layer_names)}."

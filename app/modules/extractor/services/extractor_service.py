@@ -8,7 +8,6 @@ from app.core.config import settings
 from app.llm import LLMClient
 from app.logging_config import get_logger
 from app.modules.extractor.models.extraction_result import ExtractionResult
-from app.modules.extractor.models.knowledge_model import KnowledgeModel
 from app.modules.extractor.models.recognition_output import RecognitionOutput
 from app.modules.extractor.models.structure_output import StructureOutput
 from app.modules.extractor.models.reasoning_output import ReasoningOutput

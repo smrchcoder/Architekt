@@ -13,7 +13,6 @@ from app.modules.extractor.models.knowledge_model import (
 )
 from app.modules.sections._shared.entity_resolver import (
     build_name_to_slug_map,
-    slugify,
 )
 from app.modules.sections.flow.prompts import (
     FLOW_SYSTEM_PROMPT,
@@ -23,6 +22,7 @@ from app.modules.sections.flow.schemas import (
     FlowEnrichment,
     FlowSection,
     FlowStep,
+    FlowWalkthroughEnrichment,
     FlowTransition,
     FlowWalkthrough,
 )
@@ -48,7 +48,9 @@ class FlowBuilder:
 
         # Collect layer names so entities matching layer names are skipped
         # (matching ArchitectureBuilder behavior — prevents dangling slugs)
-        layer_names: set[str] = {l.layer_name for l in knowledge_model.layer_signals}
+        layer_names: set[str] = {
+            layer_signal.layer_name for layer_signal in knowledge_model.layer_signals
+        }
 
         # Build entity name → slug map using the shared utility.
         # This uses the SAME collision handling as ArchitectureBuilder,

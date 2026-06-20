@@ -4,6 +4,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.logging_config import get_logger
@@ -210,6 +211,36 @@ class OrchestratorService:
 
     def get_run(self, db: Session, run_id: str) -> ProcessingRun | None:
         return db.get(ProcessingRun, run_id)
+
+    def recover_interrupted_runs(self, db: Session) -> int:
+        """Mark runs left in queued/running as failed after a process restart.
+
+        The current pipeline is executed via FastAPI BackgroundTasks, which are
+        process-local. If the server restarts while work is in flight, those
+        tasks are not resumed automatically. Without recovery, clients can poll
+        forever against runs that will never complete.
+        """
+        active_runs = db.execute(
+            select(ProcessingRun).where(
+                ProcessingRun.status.in_(("queued", "running"))
+            )
+        ).scalars().all()
+
+        if not active_runs:
+            return 0
+
+        recovered_at = datetime.now(timezone.utc)
+        for run in active_runs:
+            run.status = "failed"
+            run.current_step = "failed"
+            run.error_message = (
+                "Run was interrupted by an application restart before completion. "
+                "Please create a new run."
+            )
+            run.updated_at = recovered_at
+
+        db.commit()
+        return len(active_runs)
 
     def to_read_model(self, run: ProcessingRun) -> ProcessingRunRead:
         return ProcessingRunRead(

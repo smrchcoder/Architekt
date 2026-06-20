@@ -269,7 +269,6 @@ class KnowledgeModelValidator:
           8. Concepts have evidence
         """
         warnings: list[str] = []
-        entity_name_set = {e.name.lower(): e for e in knowledge_model.named_entities}
 
         # ── 1. Duplicate entity detection ───────────────────────────────
         for i, e1 in enumerate(knowledge_model.named_entities):

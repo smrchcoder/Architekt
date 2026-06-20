@@ -1,16 +1,31 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.core.config import settings
 from app.logging_config import setup_logging
+from app.modules.orchestrator.service import OrchestratorService
 from app.modules.orchestrator.router import router as orchestrator_router
 from app.modules.validator.router import router as validator_router
 from app.modules.storage.router import router as storage_router
+from app.storage.db import SessionLocal
 
 setup_logging()
 
-app = FastAPI(title=settings.app_name)
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    db = SessionLocal()
+    try:
+        OrchestratorService().recover_interrupted_runs(db)
+    finally:
+        db.close()
+    yield
+
+
+app = FastAPI(title=settings.app_name, lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

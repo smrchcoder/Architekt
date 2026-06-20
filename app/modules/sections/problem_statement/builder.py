@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-
 from app.core.config import settings
 from app.llm import LLMClient
 from app.logging_config import get_logger
