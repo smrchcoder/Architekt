@@ -19,7 +19,9 @@ class ArticleRepository:
             select(Article).where(Article.source_url == source_url)
         ).scalar_one_or_none()
 
-    def get_converted(self, db: Session) -> list[tuple[Article, ProcessingRun]]:
+    def get_converted(
+        self, db: Session, *, limit: int, offset: int
+    ) -> list[tuple[Article, ProcessingRun]]:
         """Return all articles that have at least one completed ProcessingRun with sections."""
         stmt = (
             select(Article, ProcessingRun)
@@ -29,5 +31,7 @@ class ArticleRepository:
                 ProcessingRun.section_1_json.isnot(None),
             )
             .order_by(ProcessingRun.updated_at.desc())
+            .limit(limit)
+            .offset(offset)
         )
         return db.execute(stmt).all()

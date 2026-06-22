@@ -4,6 +4,7 @@ from urllib.parse import urlparse
 
 from sqlalchemy.orm import Session
 
+from app.core.url_safety import validate_public_source_url
 from app.modules.ingestion.firecrawl_client import FirecrawlClient
 from app.modules.ingestion.schema.article_schema import ArticleCreate
 from app.modules.ingestion.services.document_cleaning_service import (
@@ -29,6 +30,7 @@ class UrlIngestionService:
             raise ValueError("source_url is required for URL ingestion")
 
         source_url = str(payload.source_url)
+        validate_public_source_url(source_url)
         existing = self.repo.get_by_source_url(db, source_url)
         if existing is not None:
             return existing

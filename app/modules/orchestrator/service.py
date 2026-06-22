@@ -8,8 +8,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.logging_config import get_logger
+from app.core.errors import PublicFacingError
 from app.modules.extractor.services.extractor_service import KnowledgeExtractor
 from app.modules.extractor.services.knowledge_model_validator import (
+    KnowledgeModelValidationError,
     KnowledgeModelValidator,
 )
 from app.modules.extractor.services.overview_section_builder import (
@@ -76,6 +78,8 @@ _STEP_PROGRESS: dict[str, int] = {
     STEP_TRADEOFFS: 77,
 }
 
+DEFAULT_FAILURE_MESSAGE = "Processing failed. Please retry later."
+
 
 class OrchestratorService:
     def __init__(
@@ -109,7 +113,6 @@ class OrchestratorService:
             status="queued",
             current_step="queued",
             progress_percent=0,
-            request_payload=payload.model_dump(mode="json"),
         )
         db.add(run)
         db.commit()
@@ -121,15 +124,15 @@ class OrchestratorService:
         )
         return run
 
-    def run_pipeline(self, run_id: str) -> None:
+    def run_pipeline(self, run_id: str, payload_data: dict[str, Any]) -> None:
         """Execute the full pipeline: ingestion → extraction → validation → sections."""
         log = _log.bind(run_id=run_id)
         log.info("pipeline_started | steps_total=%d", len(PIPELINE_STEPS))
 
         db = SessionLocal()
         try:
-            run = self._require_run(db, run_id)
-            payload = PipelineRunCreate.model_validate(run.request_payload or {})
+            self._require_run(db, run_id)
+            payload = PipelineRunCreate.model_validate(payload_data)
 
             self._mark_running(db, run_id, STEP_INGESTION, 5)
             article = self._with_retry(
@@ -205,7 +208,7 @@ class OrchestratorService:
         except Exception as exc:
             db.rollback()
             log.opt.error("pipeline_failed | error=%s", str(exc))
-            self._fail_run(db, run_id, str(exc))
+            self._fail_run(db, run_id, self._public_error_message(exc))
         finally:
             db.close()
 
@@ -389,3 +392,13 @@ class OrchestratorService:
         if run is None:
             raise LookupError("processing run not found")
         return run
+
+    @staticmethod
+    def _public_error_message(exc: Exception) -> str:
+        if isinstance(exc, PublicFacingError):
+            return str(exc)
+        if isinstance(exc, KnowledgeModelValidationError):
+            return "The generated model could not be validated. Please retry."
+        if isinstance(exc, LookupError):
+            return "The requested record could not be found."
+        return DEFAULT_FAILURE_MESSAGE

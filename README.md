@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Mental Model Generator is a FastAPI-based backend that turns long-form engineering articles into a structured six-section mental model. A user can submit either an article URL or raw article text, and the system converts that source into a set of outputs designed to make the article easier to understand from first principles rather than as unstructured prose.
+Mental Model Generator is a FastAPI-based backend that turns long-form engineering articles into a structured six-section mental model. During the current closed-write MVP phase, only an operator with an admin API key can submit either an article URL or raw article text, while previously generated outputs remain publicly readable through the history endpoint.
 
 The current implementation is built around an orchestration pipeline that:
 
@@ -43,7 +43,7 @@ The current backend architecture follows a staged orchestration pattern with per
 ```mermaid
 flowchart TD
     A["User Input<br/>URL or raw text"] --> B["Orchestrator API<br/>/orchestrator/runs"]
-    B --> C["ProcessingRun created<br/>status + progress + request payload"]
+    B --> C["ProcessingRun created<br/>status + progress"]
     C --> D["Ingestion Service"]
     D --> E["Article storage<br/>articles table"]
     E --> F["Knowledge Extractor"]
@@ -82,8 +82,9 @@ The main execution path lives in [app/modules/orchestrator/service.py](D:/Tech_W
 1. validates that exactly one input is provided: `source_url` or `raw_text`,
 2. creates a `ProcessingRun` record with `queued` status,
 3. launches the pipeline asynchronously with FastAPI `BackgroundTasks`,
-4. updates run progress and step names throughout execution,
-5. stores each generated section directly on the run record.
+4. requires an admin API key for run creation and polling,
+5. updates run progress and step names throughout execution,
+6. stores each generated section directly on the run record.
 
 The orchestrator pipeline is explicitly step-based:
 
@@ -97,7 +98,7 @@ The orchestrator pipeline is explicitly step-based:
 8. `flow`
 9. `tradeoffs`
 
-Each step is retried independently with exponential backoff. Failures update the run status to `failed` and preserve the error message in storage.
+Each step is retried independently with exponential backoff. Failures update the run status to `failed` and preserve only a sanitized client-safe error message in storage while full details remain in server logs.
 
 ### 2. Ingestion layer
 
@@ -205,7 +206,7 @@ The storage schema in [app/storage/models.py](D:/Tech_With_Me/portfolio/resume/M
 2. `KnowledgeModelRecord`
    Stores the merged knowledge model and raw JSON from all three extraction passes.
 3. `ProcessingRun`
-   Stores orchestration status, progress, request payload, and the six final section JSON blobs.
+   Stores orchestration status, progress, and the six final section JSON blobs.
 
 This creates a layered persistence strategy:
 
@@ -217,7 +218,7 @@ This creates a layered persistence strategy:
 
 The currently implemented end-to-end execution path is:
 
-1. A client submits `POST /orchestrator/runs` with either `source_url` or `raw_text`.
+1. An operator submits `POST /orchestrator/runs` with either `source_url` or `raw_text` plus the admin API key.
 2. The API creates a queued `ProcessingRun` and returns immediately with a `202` response.
 3. A background task starts the orchestrator pipeline.
 4. The pipeline ingests the article and stores an `Article` record.
@@ -228,9 +229,20 @@ The currently implemented end-to-end execution path is:
 9. The orchestrator runs the six section builders in sequence.
 10. Each completed section is persisted onto the same `ProcessingRun`.
 11. The run is marked `completed` with `progress_percent = 100`.
-12. A client can poll `GET /orchestrator/runs/{run_id}` to retrieve progress and final section data.
+12. The operator can poll `GET /orchestrator/runs/{run_id}` with the admin API key to retrieve progress and final section data.
 
-There is also a supporting `GET /storage/articles/converted` endpoint that returns articles whose runs completed successfully with section output present.
+There is also a supporting public `GET /storage/articles/converted` endpoint that returns articles whose runs completed successfully with section output present. The endpoint is paginated with `limit` and `offset`.
+
+## Deployment Mode
+
+The current deployment posture is intentionally closed-write and public-read:
+
+1. `POST /orchestrator/runs` is operator-only and requires `X-API-Key`.
+2. `GET /orchestrator/runs/{run_id}` is operator-only and requires `X-API-Key`.
+3. `POST /validator/validate` is operator-only and requires `X-API-Key`.
+4. `GET /storage/articles/converted` is public for showcasing completed outputs.
+5. FastAPI docs are disabled outside development by default.
+6. CORS must be configured explicitly; wildcard origins are rejected outside development.
 
 ## Tech Stack
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 from time import perf_counter
 
 from app.core.config import settings
+from app.core.errors import PublicFacingError
 from app.modules.ingestion.schema.firecrawl_client_schema import (
     FirecrawlMediaItem,
     FirecrawlScrapeResult,
@@ -15,7 +16,9 @@ class FirecrawlClient:
 
     def scrape_url_as_markdown(self, url: str) -> FirecrawlScrapeResult:
         if not self.api_key:
-            raise ValueError("FIRECRAWL_API_KEY is not set")
+            raise PublicFacingError(
+                "URL ingestion is not configured on the server"
+            )
 
         formats = [
             fmt.strip()

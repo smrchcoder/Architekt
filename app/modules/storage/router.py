@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.modules.storage.schemas import ConvertedArticleRead
@@ -17,10 +17,14 @@ def health():
 
 
 @router.get("/articles/converted", response_model=list[ConvertedArticleRead])
-def get_converted_articles(db: Session = Depends(get_db)):
+def get_converted_articles(
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+):
     """Fetch all articles that have been fully processed into sections."""
     repo = ArticleRepository()
-    rows = repo.get_converted(db)
+    rows = repo.get_converted(db, limit=limit, offset=offset)
     return [
         ConvertedArticleRead(
             article_id=article.article_id,

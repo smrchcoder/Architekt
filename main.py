@@ -17,6 +17,7 @@ setup_logging()
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    settings.validate_runtime()
     db = SessionLocal()
     try:
         OrchestratorService().recover_interrupted_runs(db)
@@ -25,27 +26,34 @@ async def lifespan(_app: FastAPI):
     yield
 
 
-app = FastAPI(title=settings.app_name, lifespan=lifespan)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origins.split(",") if settings.cors_origins else ["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+app = FastAPI(
+    title=settings.app_name,
+    lifespan=lifespan,
+    docs_url="/docs" if settings.api_docs_enabled else None,
+    redoc_url="/redoc" if settings.api_docs_enabled else None,
+    openapi_url="/openapi.json" if settings.api_docs_enabled else None,
 )
+
+if settings.normalized_cors_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.normalized_cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 
 @app.get("/")
 def read_root():
-    return {"message": "Hi !!", "app": settings.app_name, "env": settings.environment}
+    return {"status": "ok", "app": settings.app_name}
 
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     return JSONResponse(
         status_code=500,
-        content={"detail": "Internal server error", "type": type(exc).__name__},
+        content={"detail": "Internal server error"},
     )
 
 
