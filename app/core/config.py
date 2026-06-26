@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     backend_api_key: str | None = None
     firecrawl_api_key: str | None = None
     firecrawl_formats: str
+    enable_file_logging: bool | None = None
+    db_pool_size: int = 5
+    db_max_overflow: int = 5
+    db_pool_recycle: int = 1800
 
     # LLM Settings
     llm_provider: str = "openai"
@@ -70,6 +74,12 @@ class Settings(BaseSettings):
     def api_docs_enabled(self) -> bool:
         if self.expose_api_docs is not None:
             return self.expose_api_docs
+        return self.is_development
+
+    @property
+    def file_logging_enabled(self) -> bool:
+        if self.enable_file_logging is not None:
+            return self.enable_file_logging
         return self.is_development
 
     @property

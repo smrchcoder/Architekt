@@ -17,6 +17,7 @@ import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any
+from app.core.config import settings
 
 
 class _ExtraFormatter(logging.Formatter):
@@ -110,6 +111,11 @@ def setup_logging(*, verbose: bool = False) -> None:
     )
     stderr_handler.setFormatter(_ExtraFormatter(stderr_fmt, datefmt="%H:%M:%S"))
     root.addHandler(stderr_handler)
+
+    if not settings.file_logging_enabled:
+        _should_configure = False
+        root.debug("logging configured | file_logging=False")
+        return
 
     # ── file handler (verbose, rotated) ──────────────────────────────
     logs_dir = Path(__file__).resolve().parent.parent / "logs"

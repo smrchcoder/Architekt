@@ -35,3 +35,18 @@ class ArticleRepository:
             .offset(offset)
         )
         return db.execute(stmt).all()
+
+    def get_converted_by_run_id(
+        self, db: Session, run_id: str
+    ) -> tuple[Article, ProcessingRun] | None:
+        """Return the converted article payload for a specific completed run."""
+        stmt = (
+            select(Article, ProcessingRun)
+            .join(ProcessingRun, Article.article_id == ProcessingRun.article_id)
+            .where(
+                ProcessingRun.run_id == run_id,
+                ProcessingRun.status == "completed",
+                ProcessingRun.section_1_json.isnot(None),
+            )
+        )
+        return db.execute(stmt).one_or_none()
