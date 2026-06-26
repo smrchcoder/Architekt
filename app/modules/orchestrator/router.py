@@ -3,7 +3,6 @@ from __future__ import annotations
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.core.security import require_admin_api_key
 from app.modules.orchestrator.service import OrchestratorService
 from app.modules.orchestrator.schemas import (
     PipelineRunCreate,
@@ -30,7 +29,6 @@ def create_pipeline_run(
     payload: PipelineRunCreate,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    _: None = Depends(require_admin_api_key),
 ):
     """Create a new processing run and kick off the pipeline asynchronously."""
     service = OrchestratorService()
@@ -48,7 +46,6 @@ def create_pipeline_run(
 def get_run(
     run_id: str,
     db: Session = Depends(get_db),
-    _: None = Depends(require_admin_api_key),
 ):
     """Poll a processing run to check progress and retrieve the result when completed."""
     service = OrchestratorService()

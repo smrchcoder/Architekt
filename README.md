@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Mental Model Generator is a FastAPI-based backend that turns long-form engineering articles into a structured six-section mental model. During the current closed-write MVP phase, only an operator with an admin API key can submit either an article URL or raw article text, while previously generated outputs remain publicly readable through the history endpoint.
+Mental Model Generator is a FastAPI-based backend that turns long-form engineering articles into a structured six-section mental model. During the current MVP phase, write access is kept private by network placement: the backend binds to loopback in production, API docs stay disabled outside development, and only previously generated outputs are exposed through the history endpoint.
 
 The current implementation is built around an orchestration pipeline that:
 
@@ -82,7 +82,7 @@ The main execution path lives in [app/modules/orchestrator/service.py](D:/Tech_W
 1. validates that exactly one input is provided: `source_url` or `raw_text`,
 2. creates a `ProcessingRun` record with `queued` status,
 3. launches the pipeline asynchronously with FastAPI `BackgroundTasks`,
-4. requires an admin API key for run creation and polling,
+4. keeps run creation and polling private through deployment topology rather than an application-layer admin key,
 5. updates run progress and step names throughout execution,
 6. stores each generated section directly on the run record.
 
@@ -218,7 +218,7 @@ This creates a layered persistence strategy:
 
 The currently implemented end-to-end execution path is:
 
-1. An operator submits `POST /orchestrator/runs` with either `source_url` or `raw_text` plus the admin API key.
+1. An operator submits `POST /orchestrator/runs` with either `source_url` or `raw_text`.
 2. The API creates a queued `ProcessingRun` and returns immediately with a `202` response.
 3. A background task starts the orchestrator pipeline.
 4. The pipeline ingests the article and stores an `Article` record.
@@ -229,20 +229,20 @@ The currently implemented end-to-end execution path is:
 9. The orchestrator runs the six section builders in sequence.
 10. Each completed section is persisted onto the same `ProcessingRun`.
 11. The run is marked `completed` with `progress_percent = 100`.
-12. The operator can poll `GET /orchestrator/runs/{run_id}` with the admin API key to retrieve progress and final section data.
+12. The operator can poll `GET /orchestrator/runs/{run_id}` to retrieve progress and final section data.
 
 There is also a supporting public `GET /storage/articles/converted` endpoint that returns articles whose runs completed successfully with section output present. The endpoint is paginated with `limit` and `offset`.
 
 ## Deployment Mode
 
-The current deployment posture is intentionally closed-write and public-read:
+The current deployment posture is intentionally private-write and public-read:
 
-1. `POST /orchestrator/runs` is operator-only and requires `X-API-Key`.
-2. `GET /orchestrator/runs/{run_id}` is operator-only and requires `X-API-Key`.
-3. `POST /validator/validate` is operator-only and requires `X-API-Key`.
-4. `GET /storage/articles/converted` is public for showcasing completed outputs.
-5. FastAPI docs are disabled outside development by default.
-6. CORS must be configured explicitly; wildcard origins are rejected outside development.
+1. `POST /orchestrator/runs`, `GET /orchestrator/runs/{run_id}`, and `POST /validator/validate` are intended to stay private through network placement rather than an application-layer admin key.
+2. Production startup enforces binding the backend to `127.0.0.1:8000`.
+3. `GET /storage/articles/converted` is public for showcasing completed outputs.
+4. FastAPI docs are disabled outside development by default.
+5. CORS must be configured explicitly; wildcard origins are rejected outside development.
+6. Input size bounds, URL safety checks, and sanitized error responses remain in place.
 
 ## Tech Stack
 

@@ -18,7 +18,6 @@ class Settings(BaseSettings):
     database_url: str
     host: str
     port: int
-    backend_api_key: str | None = None
     firecrawl_api_key: str | None = None
     firecrawl_formats: str
     enable_file_logging: bool | None = None
@@ -87,13 +86,17 @@ class Settings(BaseSettings):
         return self.cors_origins or []
 
     def validate_runtime(self) -> None:
-        if not self.is_development and not self.backend_api_key:
-            raise RuntimeError(
-                "BACKEND_API_KEY must be configured outside development"
-            )
         if not self.is_development and "*" in self.normalized_cors_origins:
             raise RuntimeError(
                 "Wildcard CORS origins are not allowed outside development"
+            )
+        if not self.is_development and self.host != "127.0.0.1":
+            raise RuntimeError(
+                "Production host must remain bound to 127.0.0.1"
+            )
+        if not self.is_development and self.port != 8000:
+            raise RuntimeError(
+                "Production port must remain bound to 8000"
             )
 
 
